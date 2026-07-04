@@ -1,3 +1,4 @@
+/*
 import { Compiler } from "./compiler/compiler.ts";
 import { mount } from "./utils/render.ts";
 import { $state } from "./utils/states.ts";
@@ -16,3 +17,20 @@ const { template, scope } = new Compiler("test.deca")
   .compile(appSource);
 
 mount(template, container, scope);
+*/
+
+
+import "ses";
+import bundled from "../dist/assets/index-ByOhxz8U?raw";
+import { createSafeDocument } from "./__temporary/safe-document.ts";
+
+lockdown();
+
+const pluginRoot = document.getElementById("app")!;
+const safeDocument = createSafeDocument(pluginRoot);
+
+const compartment = new Compartment({
+  "document": safeDocument,
+});
+
+compartment.evaluate(bundled);
