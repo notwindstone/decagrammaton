@@ -8,9 +8,9 @@ export function $state<T>(input: T): StateType<T> {
   const handler: ProxyHandler<StateType<T>> = {
     // Adds the current render function to a state property subscription set
     get(target, property, receiver) {
-      // If the values was read outside a render function, we do not want to add any new subscriptions
+      // If the value was read outside a render function, we do not want to add any new subscriptions
       if (!Reactivity.Render.active) {
-        return;
+        return Reflect.get(target, property, receiver);
       }
 
       let mappings: MappingsType | undefined = Reactivity.Proxies.get(receiver);
@@ -30,10 +30,11 @@ export function $state<T>(input: T): StateType<T> {
       }
 
       subscriptions.add(Reactivity.Render.active);
+      Reactivity.trackSubscription(Reactivity.Render.active, subscriptions);
 
       return Reflect.get(target, property, receiver);
     },
-    // Fires all the state property subscriptions
+    // Fire all the state property subscriptions
     set(target, property, value, receiver) {
       // Fire the render functions only after the assignment
       const assigned: boolean = Reflect.set(target, property, value, receiver);
