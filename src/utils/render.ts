@@ -46,7 +46,7 @@ function mountElement(
   const element = document.createElement(node.tag);
 
   HTMLElements.set(id, element);
-  applyAttributes(element, node.attributes, scope);
+  const attributeCleanups = applyAttributes(element, node.attributes, scope);
 
   const childCleanups: Array<CleanupType> = node.children.map(node => {
     return mountNode(node, element, scope);
@@ -56,6 +56,10 @@ function mountElement(
 
   return () => {
     for (const cleanup of childCleanups) {
+      cleanup?.();
+    }
+
+    for (const cleanup of attributeCleanups) {
       cleanup?.();
     }
 
@@ -112,8 +116,8 @@ function applyAttributes(
   element: HTMLElement,
   attributes: Array<Attribute>,
   scope: Record<string, unknown>,
-): void {
-  for (const attribute of attributes) {
+): Array<CleanupType> {
+  return attributes.map(attribute => {
     switch (attribute.type) {
       case "attribute": {
         const attributeValue: string = attribute.value === true
@@ -122,7 +126,7 @@ function applyAttributes(
 
         element.setAttribute(attribute.name, attributeValue);
 
-        break;
+        return null;
       }
       case "expression-attribute": {
         if (attribute.name.startsWith("@")) {
@@ -133,7 +137,7 @@ function applyAttributes(
             element.addEventListener(eventName, handler as EventListener);
           }
 
-          break;
+          return null;
         }
 
         const subscribedSets = new Set<SubscriptionsType>();
@@ -156,10 +160,16 @@ function applyAttributes(
 
         render();
 
-        break;
+        return () => {
+          for (const subscriptions of subscribedSets) {
+            subscriptions.delete(render);
+          }
+
+          subscribedSets.clear();
+        };
       }
     }
-  }
+  });
 }
 
 // Suppose the 'expression' is 'myState.value', and 'scope' is '{ myState, increment }'
@@ -175,6 +185,9 @@ function evaluateExpression(expression: string, scope: Record<string, unknown>):
   if (!evaluate) {
     // Here we want to evaluate our expression ('myState.value'), so we build a function with an appropriate scope
     evaluate = new Function(...keys, `return (${expression});`);
+
+    // Cache the function for the future render function calls
+    GeneralInternals.cachedExpressionFunctions.set(cachedKey, evaluate);
   }
 
   // This function will evaluate 'myState.value' with the provided values
