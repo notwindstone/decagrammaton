@@ -1,0 +1,1 @@
+export type ComponentScriptType = (...args: unknown[]) => Record<string, unknown>;

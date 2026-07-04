@@ -1,5 +1,6 @@
-import type { TemplateNode, ElementNode, Attribute } from "../compiler/parse.ts";
+import type { TemplateNode, ElementNode, Attribute } from "../compiler/parser.ts";
 import type { SubscriptionsType } from "../types/reactivity/subscriptions.type.ts";
+import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
 import { GeneralInternals } from "../variables/general-internals.ts";
 import type { CleanupType } from "../types/component/cleanup.type.ts";
 import { Reactivity } from "../variables/reactivity.ts";
@@ -37,11 +38,19 @@ function mountNode(
   }
 }
 
+function isComponentTag(tag: string): boolean {
+  return tag[0] !== undefined && tag[0] === tag[0].toUpperCase();
+}
+
 function mountElement(
   node: ElementNode,
   parent: HTMLElement,
   scope: Record<string, unknown>
 ): CleanupType {
+  if (isComponentTag(node.tag)) {
+    return mountComponent(node, parent, scope);
+  }
+
   const id = Render.getUniqueId();
   const element = document.createElement(node.tag);
 
@@ -74,6 +83,22 @@ function mountText(node: { value: string }, parent: HTMLElement): CleanupType {
   parent.appendChild(textNode);
 
   return null;
+}
+
+function mountComponent(
+  node: ElementNode,
+  parent: HTMLElement,
+  scope: Record<string, unknown>,
+): CleanupType {
+  const definition = scope[node.tag] as ComponentDefinitionType | undefined;
+
+  if (!definition) {
+    throw new Error(`Unknown component: <${node.tag}>`);
+  }
+
+  const componentScope = definition.factory();
+
+  return mount(definition.template, parent, componentScope);
 }
 
 function mountExpression(
@@ -146,12 +171,25 @@ function applyAttributes(
           GeneralInternals.renderSubscriptions = subscribedSets;
 
           Render.active = render;
-          element.setAttribute(
-            attribute.name,
-            String(
-              evaluateExpression(attribute.value, scope) ?? "",
-            ),
-          );
+          const result: unknown = evaluateExpression(attribute.value, scope);
+          const isStyleAttribute: boolean =
+            attribute.name === "style" &&
+            typeof result === "object" &&
+            result !== null;
+
+          if (isStyleAttribute) {
+            const styles = (element.style as unknown) as Record<string, string>;
+
+            for (const [key, value] of Object.entries(result as object)) {
+              styles[key] = String(value ?? "");
+            }
+          } else {
+            element.setAttribute(
+              attribute.name,
+              String(result ?? ""),
+            );
+          }
+
           Render.active = undefined;
 
           // 'evaluateExpression' triggered the getter of a state, so now we do not need these subscriptions

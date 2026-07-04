@@ -1,0 +1,9 @@
+<script lang="ts">
+</script>
+
+<div class="container">
+  <h1>Decagrammaton</h1>
+  <Counter />
+  <input type="text" placeholder="type here..." disabled />
+  <br />
+</div>

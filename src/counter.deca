@@ -1,0 +1,13 @@
+<script lang="ts">
+  const count = $state(0);
+  const shit = $state(count.value + 2);
+</script>
+
+<div>
+  <button class={`btn ${count.value}`} style={{ "backgroundColor": `#${shit.value}55555` }} @click={() => count.value++}>
+    Clicked { count.value } times
+  </button>
+  <div>
+    Current value is: { count.value }
+  </div>
+</div>
