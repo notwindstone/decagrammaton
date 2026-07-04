@@ -35,7 +35,7 @@ const ALLOWED_TAGS = new Set([
   "h1", "h2", "h3", "h4", "h5", "h6",
   "ul", "ol", "li", "dl", "dt", "dd",
   "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
-  "form", "input", "button", "select", "option", "optgroup", "textarea", "label", "fieldset", "legend",
+  "input", "button", "select", "option", "optgroup", "textarea", "label", "fieldset", "legend",
   "img", "picture", "source", "video", "audio", "track", "canvas",
   "details", "summary", "dialog",
   "nav", "main", "header", "footer", "section", "article", "aside",
@@ -128,7 +128,7 @@ const ALLOWED_STYLE_PROPERTIES = new Set([
   "contain", "container-type", "containerType",
 ]);
 
-const URL_PATTERN = /url\s*\(/i;
+const URL_PATTERN = /url\s*\(|(-webkit-)?image-set\s*\(/i;
 
 const wrapperByRealNode = new WeakMap<Element | Text, SafeElement | SafeText>();
 const realNodeByWrapper = new WeakMap<SafeElement | SafeText, Element | Text>();
@@ -178,6 +178,11 @@ function createSafeElement(realEl: Element): SafeElement {
   if (existing) return existing as SafeElement;
 
   const style = new Proxy(Object.create(null) as Record<string, string>, {
+    get(_, prop) {
+      if (typeof prop !== "string") return undefined;
+      if (!ALLOWED_STYLE_PROPERTIES.has(prop)) return undefined;
+      return (realEl as HTMLElement).style[prop as any];
+    },
     set(_, prop, value) {
       if (typeof prop !== "string") return false;
       if (!ALLOWED_STYLE_PROPERTIES.has(prop)) return false;
