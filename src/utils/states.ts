@@ -1,7 +1,10 @@
 import type { StateType } from "../types/reactivity/state.type.ts";
 import { Reactivity } from "../variables/reactivity.ts";
+import { GeneralInternals } from "../variables/general-internals.ts";
 import type { SubscriptionsType } from "../types/reactivity/subscriptions.type.ts";
 import type { MappingsType } from "../types/reactivity/mappings.type.ts";
+
+const renderSubscriptions = GeneralInternals.renderSubscriptions;
 
 export function $state<T>(input: T): StateType<T> {
   const wrapped: StateType<T> = { "value": input };
@@ -21,16 +24,16 @@ export function $state<T>(input: T): StateType<T> {
         Reactivity.Proxies.set(receiver, mappings);
       }
 
-      let subscriptions: SubscriptionsType | undefined = mappings.get(property);
+      let stateSubscriptions: SubscriptionsType | undefined = mappings.get(property);
 
-      if (!subscriptions) {
-        subscriptions = new Set;
+      if (!stateSubscriptions) {
+        stateSubscriptions = new Set;
 
-        mappings.set(property, subscriptions);
+        mappings.set(property, stateSubscriptions);
       }
 
-      subscriptions.add(Reactivity.Render.active);
-      Reactivity.trackSubscription(Reactivity.Render.active, subscriptions);
+      stateSubscriptions.add(Reactivity.Render.active);
+      renderSubscriptions?.add?.(stateSubscriptions);
 
       return Reflect.get(target, property, receiver);
     },
