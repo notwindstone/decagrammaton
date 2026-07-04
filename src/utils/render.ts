@@ -168,8 +168,14 @@ function evaluateExpression(expression: string, scope: Record<string, unknown>):
   const keys: Array<string> = Object.keys(scope);
   // Here we will get actual values: '[{ "value": ... }, () => { ... }]'
   const values: Array<unknown> = Object.values(scope);
-  // Here we want to evaluate our expression ('myState.value'), so we build a function with an appropriate scope
-  const evaluate = new Function(...keys, `return (${expression});`);
+  // Functions do not change for the same expression and scope
+  const cachedKey: string = keys.join("-") + "-" + expression;
+  let evaluate = GeneralInternals.cachedExpressionFunctions.get(cachedKey);
+
+  if (!evaluate) {
+    // Here we want to evaluate our expression ('myState.value'), so we build a function with an appropriate scope
+    evaluate = new Function(...keys, `return (${expression});`);
+  }
 
   // This function will evaluate 'myState.value' with the provided values
   return evaluate(...values);
