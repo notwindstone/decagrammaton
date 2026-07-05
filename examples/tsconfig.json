@@ -13,11 +13,7 @@
     "moduleDetection": "force",
     "noEmit": true,
 
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "erasableSyntaxOnly": true
   },
-  "include": ["src"],
-  "exclude": ["src/__temporary", "src/__example", "src/main.ts"]
+  "include": ["src", "../src/deca.d.ts"]
 }

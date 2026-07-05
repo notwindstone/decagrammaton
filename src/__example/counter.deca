@@ -1,0 +1,20 @@
+<script lang="ts">
+  import { $state } from "../utils/states.ts";
+  import { $computed } from "../utils/computed.ts";
+
+  const count = $state(0);
+  const huh = $computed(() => count.value + 1);
+
+  // alerts didn't work: (intermediate value).alert is not a function
+  // alert("23");
+
+  // document.createElement.constructor is invalid
+</script>
+
+<div>
+  <button class={`btn ${count.value}`} style={{ "backgroundColor": `#${count.value}55555` }} @pointerdown={() => count.value++}>
+    Clicked { count.value } times
+  </button>
+  <div>f(x): { count.value }</div>
+  <div>f'(x): { huh.value }</div>
+</div>

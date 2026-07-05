@@ -2,7 +2,7 @@ import type { Plugin } from "vite";
 import { Parser } from "./parser.ts";
 import { extractImports } from "./script.ts";
 
-export function decaPlugin(): Plugin {
+export function malkuth(): Plugin {
   return {
     name: "vite-plugin-deca",
     transform(source, id) {
@@ -14,19 +14,39 @@ export function decaPlugin(): Plugin {
       const templateJson = JSON.stringify(parsed.template);
       const { imports, importedNames, cleanedScript } = extractImports(scriptContent);
 
-      const hoistedImports = imports.length > 0
-        ? imports.join("\n") + "\n"
+      const decaComponentNames = new Set<string>();
+      const processedImports = imports.map(imp => {
+        const match = imp.match(/^import\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s+from\s+['"](.+\.deca)['"]/);
+
+        if (match) {
+          decaComponentNames.add(match[1]!);
+
+          return imp.replace(/^(import\s+)([a-zA-Z_$][a-zA-Z0-9_$]*)/, "$1$2__raw");
+        }
+
+        return imp;
+      });
+
+      const hoistedImports = processedImports.length > 0
+        ? processedImports.join("\n") + "\n"
         : "";
 
       const importedNamesJson = JSON.stringify(importedNames);
+      const importEntries = importedNames.map(name => {
+        if (decaComponentNames.has(name)) {
+          return `${JSON.stringify(name)}: ${name}__raw.toComponent({})`;
+        }
+
+        return name;
+      });
       const importsObject = importedNames.length > 0
-        ? `const __imports = { ${importedNames.join(", ")} };`
+        ? `const __imports = { ${importEntries.join(", ")} };`
         : "const __imports = {};";
 
       return {
         code: `
-import { compileScript } from "/src/compiler/script.ts";
-import { mount as __mount } from "/src/utils/render.ts";
+import { compileScript } from "decagrammaton/internal";
+import { mount as __mount } from "decagrammaton";
 ${hoistedImports}
 const __template = ${templateJson};
 const __scriptContent = ${JSON.stringify(cleanedScript)};

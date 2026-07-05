@@ -53,7 +53,7 @@ export function $state<T>(input: T): StateType<T> {
         return assigned;
       }
 
-      for (const subscription of subscriptions) {
+      for (const subscription of [...subscriptions]) {
         subscription?.();
       }
 

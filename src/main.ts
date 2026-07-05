@@ -1,10 +1,7 @@
 // /*
-import Counter from "./counter.deca";
-import App from "./test.deca";
+import App from "./__example/app.deca";
 
 const container: HTMLElement = document.getElementById("app")!;
-
-const CounterDef = Counter.toComponent({});
 
 App
   .compile({ /* Counter: CounterDef */ })

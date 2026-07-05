@@ -8,21 +8,9 @@ export function $computed<T>(getter: () => T): StateType<T> {
   const ownSubscribedSets = new Set<SubscriptionsType>();
   const computedSubscriptions: SubscriptionsType = new Set();
 
-  const markDirty = (): void => {
-    if (dirty) {
-      return;
-    }
-
-    dirty = true;
-
-    for (const subscription of computedSubscriptions) {
-      subscription?.();
-    }
-  };
-
   const evaluate = (): T => {
     for (const subscriptions of ownSubscribedSets) {
-      subscriptions.delete(markDirty);
+      subscriptions.delete(onDependencyChange);
     }
 
     ownSubscribedSets.clear();
@@ -30,7 +18,7 @@ export function $computed<T>(getter: () => T): StateType<T> {
     const previousActive = Reactivity.Render.active;
     const previousRenderSubscriptions = GeneralInternals.renderSubscriptions;
 
-    Reactivity.Render.active = markDirty;
+    Reactivity.Render.active = onDependencyChange;
     GeneralInternals.renderSubscriptions = ownSubscribedSets;
 
     const result = getter();
@@ -41,6 +29,19 @@ export function $computed<T>(getter: () => T): StateType<T> {
     dirty = false;
 
     return result;
+  };
+
+  const onDependencyChange = (): void => {
+    dirty = true;
+
+    const oldValue = wrapped.value;
+    wrapped.value = evaluate();
+
+    if (oldValue !== wrapped.value) {
+      for (const subscription of [...computedSubscriptions]) {
+        subscription?.();
+      }
+    }
   };
 
   const wrapped: StateType<T> = { "value": evaluate() };

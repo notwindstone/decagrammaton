@@ -1,12 +1,41 @@
 {
   "name": "decagrammaton",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "description": "A reactive UI framework with single-file components",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./internal": {
+      "types": "./dist/compiler/script.d.ts",
+      "import": "./dist/compiler/script.js"
+    },
+    "./deca": {
+      "types": "./src/deca.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src/deca.d.ts"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vite": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "~6.0.2",

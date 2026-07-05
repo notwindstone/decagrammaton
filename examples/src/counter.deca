@@ -1,0 +1,14 @@
+<script lang="ts">
+  import { $state, $computed } from "decagrammaton";
+
+  const count = $state(0);
+  const huh = $computed(() => count.value + 1);
+</script>
+
+<div>
+  <button class={`btn ${count.value}`} style={{ "backgroundColor": `#${count.value}55555` }} @pointerdown={() => count.value++}>
+    Clicked { count.value } times
+  </button>
+  <div>f(x): { count.value }</div>
+  <div>f'(x): { huh.value }</div>
+</div>
