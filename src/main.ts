@@ -1,15 +1,13 @@
 // /*
 import Counter from "./counter.deca";
 import App from "./test.deca";
-import { $state } from "./utils/states.ts";
-import { $computed } from "./utils/computed.ts";
 
 const container: HTMLElement = document.getElementById("app")!;
 
-const CounterDef = Counter.toComponent({ $state, $computed });
+const CounterDef = Counter.toComponent({});
 
 App
-  .compile({ $state, Counter: CounterDef })
+  .compile({ /* Counter: CounterDef */ })
   .mount(container);
 // s*/
 

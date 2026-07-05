@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { $state } from "./utils/states.ts";
+  import { $computed } from "./utils/computed.ts";
+
   const count = $state(0);
   const newCount = $computed(() => count.value + 2);
 
