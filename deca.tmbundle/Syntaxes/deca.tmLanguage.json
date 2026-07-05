@@ -1,0 +1,133 @@
+{
+  "scopeName": "source.deca",
+  "name": "Deca",
+  "fileTypes": ["deca"],
+  "patterns": [
+    { "include": "#script-block" },
+    { "include": "#html" }
+  ],
+  "repository": {
+    "script-block": {
+      "begin": "(<)(script)\\b([^>]*)(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.deca" },
+        "2": { "name": "entity.name.tag.script.deca" },
+        "3": { "patterns": [{ "include": "#tag-attributes" }] },
+        "4": { "name": "punctuation.definition.tag.end.deca" }
+      },
+      "end": "(</)(script)(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.deca" },
+        "2": { "name": "entity.name.tag.script.deca" },
+        "3": { "name": "punctuation.definition.tag.end.deca" }
+      },
+      "contentName": "source.ts.embedded.deca",
+      "patterns": [
+        { "include": "source.ts" }
+      ]
+    },
+    "html": {
+      "patterns": [
+        { "include": "#expression" },
+        { "include": "#tag" },
+        { "include": "#close-tag" },
+        { "include": "#text" }
+      ]
+    },
+    "expression": {
+      "begin": "(?<!\\{)(\\{)(?!\\{)",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.interpolation.begin.deca" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.interpolation.end.deca" }
+      },
+      "contentName": "meta.embedded.expression.deca",
+      "patterns": [
+        { "include": "source.ts" }
+      ]
+    },
+    "tag": {
+      "begin": "(<)([a-zA-Z][a-zA-Z0-9_-]*)\\b",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.deca" },
+        "2": { "name": "entity.name.tag.deca" }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.deca" }
+      },
+      "patterns": [
+        { "include": "#tag-attributes" }
+      ]
+    },
+    "close-tag": {
+      "match": "(</)([a-zA-Z][a-zA-Z0-9_-]*)(>)",
+      "captures": {
+        "1": { "name": "punctuation.definition.tag.begin.deca" },
+        "2": { "name": "entity.name.tag.deca" },
+        "3": { "name": "punctuation.definition.tag.end.deca" }
+      }
+    },
+    "tag-attributes": {
+      "patterns": [
+        { "include": "#event-attribute" },
+        { "include": "#expression-attribute" },
+        { "include": "#static-attribute" },
+        { "include": "#boolean-attribute" }
+      ]
+    },
+    "event-attribute": {
+      "begin": "(@)([a-zA-Z][a-zA-Z0-9_-]*)(=)(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.event.deca" },
+        "2": { "name": "entity.other.attribute-name.event.deca" },
+        "3": { "name": "punctuation.separator.key-value.deca" },
+        "4": { "name": "punctuation.section.embedded.begin.deca" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.section.embedded.end.deca" }
+      },
+      "contentName": "source.ts.embedded.expression.deca",
+      "patterns": [
+        { "include": "source.ts" }
+      ]
+    },
+    "expression-attribute": {
+      "begin": "([a-zA-Z][a-zA-Z0-9_:-]*)(=)(\\{)",
+      "beginCaptures": {
+        "1": { "name": "entity.other.attribute-name.deca" },
+        "2": { "name": "punctuation.separator.key-value.deca" },
+        "3": { "name": "punctuation.section.embedded.begin.deca" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.section.embedded.end.deca" }
+      },
+      "contentName": "source.ts.embedded.expression.deca",
+      "patterns": [
+        { "include": "source.ts" }
+      ]
+    },
+    "static-attribute": {
+      "match": "([a-zA-Z][a-zA-Z0-9_:-]*)(=)(\"[^\"]*\"|'[^']*')",
+      "captures": {
+        "1": { "name": "entity.other.attribute-name.deca" },
+        "2": { "name": "punctuation.separator.key-value.deca" },
+        "3": { "name": "string.quoted.deca" }
+      }
+    },
+    "boolean-attribute": {
+      "match": "(?<=\\s)([a-zA-Z][a-zA-Z0-9_:-]*)(?=\\s|/?>)",
+      "captures": {
+        "1": { "name": "entity.other.attribute-name.deca" }
+      }
+    },
+    "text": {
+      "match": "[^<{]+",
+      "name": "text.deca"
+    }
+  }
+}
