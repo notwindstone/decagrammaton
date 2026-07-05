@@ -1,10 +1,14 @@
 <script lang="ts">
   const count = $state(0);
-  const shit = $state(count.value + 2);
+
+  // alerts didn't work: (intermediate value).alert is not a function
+  // alert("23");
+
+  // document.createElement.constructor is invalid
 </script>
 
 <div>
-  <button class={`btn ${count.value}`} style={{ "backgroundColor": `#${shit.value}55555` }} @click={() => count.value++}>
+  <button class={`btn ${count.value}`} style={{ "backgroundColor": `#${count.value}55555` }} @click={() => count.value++}>
     Clicked { count.value } times
   </button>
   <div>
