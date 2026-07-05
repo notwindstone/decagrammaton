@@ -3,10 +3,11 @@ import Counter from "./counter.deca";
 import App from "./test.deca";
 import { mount } from "./utils/render.ts";
 import { $state } from "./utils/states.ts";
+import { $computed } from "./utils/computed.ts";
 
 const container: HTMLElement = document.getElementById("app")!;
 
-const CounterDef = Counter.toComponent({ $state });
+const CounterDef = Counter.toComponent({ $state, $computed });
 const { template, scope } = App.compile({ $state, Counter: CounterDef });
 
 mount(template, container, scope);

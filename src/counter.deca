@@ -1,5 +1,6 @@
 <script lang="ts">
   const count = $state(0);
+  const newCount = $computed(() => count.value + 2);
 
   // alerts didn't work: (intermediate value).alert is not a function
   // alert("23");
@@ -13,5 +14,8 @@
   </button>
   <div>
     Current value is: { count.value }
+  </div>
+  <div>
+    Current values plus 2 is: { newCount.value }
   </div>
 </div>
