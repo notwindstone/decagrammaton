@@ -4,15 +4,17 @@ export interface SafeEventType {
   altKey: boolean;
   shiftKey: boolean;
   metaKey: boolean;
-  targetId: string;
-  targetValue: unknown;
-  currentTargetId: string;
-  currentTargetValue: unknown;
+  target: {
+    id: string;
+    value: unknown;
+  };
+  currentTarget: {
+    id: string;
+    value: unknown;
+  };
   preventDefault(): void;
   stopPropagation(): void;
   stopImmediatePropagation(): void;
-  setTargetValue(input: string | number | boolean): void;
-  setCurrentTargetValue(input: string | number | boolean): void;
 }
 
 export interface SafeElement {
@@ -151,25 +153,33 @@ function createSafeEvent(nativeEvent: Event, _wrapper: SafeElement): SafeEventTy
     altKey: (nativeEvent as KeyboardEvent).altKey ?? false,
     shiftKey: (nativeEvent as KeyboardEvent).shiftKey ?? false,
     metaKey: (nativeEvent as KeyboardEvent).metaKey ?? false,
-    targetId: String(getTargetProp(nativeEvent.target, "id") ?? ""),
-    targetValue: getTargetProp(nativeEvent.target, "value"),
-    currentTargetId: String(getTargetProp(nativeEvent.currentTarget, "id") ?? ""),
-    currentTargetValue: getTargetProp(nativeEvent.currentTarget, "value"),
+    target: {
+      id: String(getTargetProp(nativeEvent.target, "id") ?? ""),
+      get value() {
+        return getTargetProp(nativeEvent.target, "value");
+      },
+      set value(input: unknown) {
+        assertPrimitiveInput(input);
+        if (nativeEvent.target !== null && "value" in nativeEvent.target) {
+          (nativeEvent.target as HTMLInputElement).value = String(input);
+        }
+      },
+    },
+    currentTarget: {
+      id: String(getTargetProp(nativeEvent.currentTarget, "id") ?? ""),
+      get value() {
+        return getTargetProp(nativeEvent.currentTarget, "value");
+      },
+      set value(input: unknown) {
+        assertPrimitiveInput(input);
+        if (nativeEvent.currentTarget !== null && "value" in nativeEvent.currentTarget) {
+          (nativeEvent.currentTarget as HTMLInputElement).value = String(input);
+        }
+      },
+    },
     preventDefault: () => nativeEvent.preventDefault(),
     stopPropagation: () => nativeEvent.stopPropagation(),
     stopImmediatePropagation: () => nativeEvent.stopImmediatePropagation(),
-    setTargetValue(input: string | number | boolean) {
-      assertPrimitiveInput(input);
-      if (nativeEvent.target !== null && "value" in nativeEvent.target) {
-        (nativeEvent.target as HTMLInputElement).value = String(input);
-      }
-    },
-    setCurrentTargetValue(input: string | number | boolean) {
-      assertPrimitiveInput(input);
-      if (nativeEvent.currentTarget !== null && "value" in nativeEvent.currentTarget) {
-        (nativeEvent.currentTarget as HTMLInputElement).value = String(input);
-      }
-    },
   });
 }
 

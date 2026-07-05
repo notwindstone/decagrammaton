@@ -1,9 +1,16 @@
 <script lang="ts">
+  const input = $state("");
+
+  function handleChange(event) {
+    input.value = event.target.value;
+  }
 </script>
 
 <div class="container">
   <h1>Decagrammaton</h1>
   <Counter />
-  <input type="text" placeholder="type here..." disabled />
+  <input @change={handleChange} type="text" placeholder="type here..." />
   <br />
+  <div>Input: { input.value }</div>
+  <button @click={() => input.value = "fah"}>huh</button>
 </div>

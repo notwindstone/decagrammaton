@@ -1,4 +1,4 @@
-function extractTopLevelNames(script: string): Array<string> {
+export function extractTopLevelNames(script: string): Array<string> {
   const names: Array<string> = [];
   let braceDepth = 0;
   let i = 0;
