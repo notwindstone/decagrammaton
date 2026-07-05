@@ -5,6 +5,7 @@ declare module "*.deca" {
   interface CompiledComponent {
     template: Array<TemplateNode>;
     scope: Record<string, unknown>;
+    mount: (container: HTMLElement) => () => void;
   }
 
   const mod: {

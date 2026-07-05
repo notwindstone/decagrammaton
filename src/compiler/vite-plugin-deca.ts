@@ -15,6 +15,7 @@ export function decaPlugin(): Plugin {
       return {
         code: `
 import { compileScript } from "/src/compiler/script.ts";
+import { mount as __mount } from "/src/utils/render.ts";
 
 const __template = ${templateJson};
 const __scriptContent = ${JSON.stringify(scriptContent)};
@@ -23,9 +24,12 @@ export function compile(globals) {
   const globalNames = Object.keys(globals);
   const globalValues = Object.values(globals);
   const compiled = compileScript(__scriptContent, globalNames);
+  const template = __template;
+  const scope = { ...globals, ...compiled(...globalValues) };
   return {
-    template: __template,
-    scope: { ...globals, ...compiled(...globalValues) },
+    template,
+    scope,
+    mount: (container) => __mount(template, container, scope),
   };
 }
 

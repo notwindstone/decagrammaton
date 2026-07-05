@@ -1,5 +1,6 @@
 import { Parser } from "./parser.ts";
 import { compileScript } from "./script.ts";
+import { mount } from "../utils/render.ts";
 import type { ParsedComponentType } from "../types/component/parsed-component.type.ts";
 import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
 import type { TemplateNode } from "./parser.ts";
@@ -33,9 +34,12 @@ export class Compiler {
       ...compiledScript(...globalValues),
     };
 
+    const template = this.parsed.template;
+
     return {
-      template: this.parsed.template,
+      template,
       scope,
+      mount: (container: HTMLElement) => mount(template, container, scope),
     };
   }
 
@@ -62,4 +66,5 @@ export class Compiler {
 export interface CompiledComponent {
   template: Array<TemplateNode>;
   scope: Record<string, unknown>;
+  mount: (container: HTMLElement) => () => void;
 }
