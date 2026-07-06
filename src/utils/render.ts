@@ -1,3 +1,12 @@
+import type {
+  SafeElement,
+  SafeTextNode,
+  SafeDocument,
+  EventHandler,
+  EventCleanup,
+  HeadingLevel,
+  FormattingTag,
+} from "ark-of-atrahasis";
 import { effect } from "alien-signals";
 import type {
   TemplateNode,
@@ -7,15 +16,6 @@ import type {
   Attribute,
 } from "../compiler/parser.ts";
 import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
-import type {
-  SafeElement,
-  SafeTextNode,
-  SafeDocument,
-  EventHandler,
-  EventCleanup,
-  HeadingLevel,
-  FormattingTag,
-} from "../__temporary/gui/types.ts";
 
 type CleanupFn = () => void;
 

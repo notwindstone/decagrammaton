@@ -1,9 +1,10 @@
+import type { SafeElement, SafeDocument } from "ark-of-atrahasis";
+
 import { Parser } from "./parser.ts";
 import { compileScript } from "./script.ts";
 import { mount } from "../utils/render.ts";
 import type { ParsedComponentType, TemplateNode } from "./parser.ts";
 import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
-import type { SafeElement, SafeDocument } from "../__temporary/gui/types.ts";
 
 export class Compiler {
   private readonly filename: string;

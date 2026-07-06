@@ -1,7 +1,8 @@
+import type { SafeElement, SafeDocument } from "ark-of-atrahasis";
+
 import { mount } from "./utils/render.ts";
 import type { TemplateNode } from "./compiler/parser.ts";
 import type { ComponentDefinitionType } from "./types/component/component-definition.type.ts";
-import type { SafeElement, SafeDocument } from "./__temporary/gui/types.ts";
 
 export interface DecaModule {
   compile(globals: Record<string, unknown>): {
