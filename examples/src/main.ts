@@ -1,3 +1,9 @@
+
+// UnoCSS essentials
+import "virtual:uno.css";
+// Resets all styles in a Tailwind-like way
+import "@unocss/reset/tailwind.css";
+
 import { createSafeDocument } from "../../src/__temporary/gui";
 import { createApp } from "../../src";
 import App from "./app.deca";
@@ -7,6 +13,4 @@ const gui = createSafeDocument(
 );
 const instance = createApp(App);
 
-instance
-  .provide({ "globalVariable": "Hii" })
-  .mount(gui.getElement("app")!, gui);
+instance.mount(gui.getElement("app")!, gui);

@@ -1,0 +1,9 @@
+<script lang="ts">
+</script>
+
+<template>
+  <div class="text-center mb-8">
+    <h1 class="text-4xl font-bold text-indigo-600 mb-2">Sensei's Task Board</h1>
+    <p class="text-gray-500 text-lg">Schale Task Management System v1.0</p>
+  </div>
+</template>

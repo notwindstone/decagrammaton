@@ -12,7 +12,10 @@
     "decagrammaton": "^0.1.1"
   },
   "devDependencies": {
+    "@unocss/preset-wind3": "^66.7.4",
+    "@unocss/reset": "^66.7.4",
     "typescript": "~6.0.2",
+    "unocss": "^66.7.4",
     "vite": "^8.1.1"
   }
 }
