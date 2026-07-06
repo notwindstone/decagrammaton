@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "A reactive UI framework with single-file components",
   "license": "GPL-3.0-only",
