@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "A reactive UI framework with single-file components",
   "license": "MIT",
@@ -18,12 +18,11 @@
       "import": "./dist/compiler/script.js"
     },
     "./deca": {
-      "types": "./src/deca.d.ts"
+      "types": "./dist/deca.d.ts"
     }
   },
   "files": [
-    "dist",
-    "src/deca.d.ts"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -38,6 +37,7 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
   },

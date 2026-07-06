@@ -11,9 +11,10 @@ export function mount(
   nodes: Array<TemplateNode>,
   container: HTMLElement,
   scope: Record<string, unknown>,
+  components?: Record<string, ComponentDefinitionType>,
 ): () => void {
   const cleanups: Array<CleanupType> = nodes.map(node => {
-    return mountNode(node, container, scope);
+    return mountNode(node, container, scope, components);
   });
 
   return () => {
@@ -27,10 +28,11 @@ function mountNode(
   node: TemplateNode,
   parent: HTMLElement,
   scope: Record<string, unknown>,
+  components?: Record<string, ComponentDefinitionType>,
 ): CleanupType {
   switch (node.type) {
     case "element":
-      return mountElement(node, parent, scope);
+      return mountElement(node, parent, scope, components);
     case "text":
       return mountText(node, parent);
     case "expression":
@@ -45,10 +47,11 @@ function isComponentTag(tag: string): boolean {
 function mountElement(
   node: ElementNode,
   parent: HTMLElement,
-  scope: Record<string, unknown>
+  scope: Record<string, unknown>,
+  components?: Record<string, ComponentDefinitionType>,
 ): CleanupType {
   if (isComponentTag(node.tag)) {
-    return mountComponent(node, parent, scope);
+    return mountComponent(node, parent, scope, components);
   }
 
   const id = Render.getUniqueId();
@@ -58,7 +61,7 @@ function mountElement(
   const attributeCleanups = applyAttributes(element, node.attributes, scope);
 
   const childCleanups: Array<CleanupType> = node.children.map(node => {
-    return mountNode(node, element, scope);
+    return mountNode(node, element, scope, components);
   });
 
   parent.appendChild(element);
@@ -89,16 +92,17 @@ function mountComponent(
   node: ElementNode,
   parent: HTMLElement,
   scope: Record<string, unknown>,
+  components?: Record<string, ComponentDefinitionType>,
 ): CleanupType {
-  const definition = scope[node.tag] as ComponentDefinitionType | undefined;
+  const definition = (scope[node.tag] ?? components?.[node.tag]) as ComponentDefinitionType | undefined;
 
   if (!definition) {
-    throw new Error(`Unknown component: <${node.tag}>`);
+    return null;
   }
 
   const componentScope = definition.factory();
 
-  return mount(definition.template, parent, componentScope);
+  return mount(definition.template, parent, componentScope, components);
 }
 
 function mountExpression(

@@ -1,17 +1,34 @@
 declare module "*.deca" {
-  import type { TemplateNode } from "./compiler/parser.ts";
-  import type { ComponentDefinitionType } from "./types/component/component-definition.type.ts";
-
   interface CompiledComponent {
-    template: Array<TemplateNode>;
+    template: Array<unknown>;
     scope: Record<string, unknown>;
     mount: (container: HTMLElement) => () => void;
   }
 
+  interface ComponentDefinition {
+    template: Array<unknown>;
+    factory: () => Record<string, unknown>;
+  }
+
   const mod: {
     compile(globals: Record<string, unknown>): CompiledComponent;
-    toComponent(globals: Record<string, unknown>): ComponentDefinitionType;
+    toComponent(globals: Record<string, unknown>): ComponentDefinition;
   };
 
   export default mod;
+}
+
+declare module "decagrammaton" {
+  export function createApp(rootModule: DecaModule): AppInstance;
+
+  export interface AppInstance {
+    provide(globals: Record<string, unknown>): AppInstance;
+    component(name: string, mod: DecaModule): AppInstance;
+    mount(container: HTMLElement): () => void;
+  }
+
+  interface DecaModule {
+    compile(globals: Record<string, unknown>): CompiledComponent;
+    toComponent(globals: Record<string, unknown>): ComponentDefinition;
+  }
 }

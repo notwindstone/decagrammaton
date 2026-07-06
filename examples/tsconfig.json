@@ -15,5 +15,5 @@
 
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "../src/deca.d.ts"]
+  "include": ["src"]
 }

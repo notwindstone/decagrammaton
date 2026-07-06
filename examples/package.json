@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "decagrammaton": "link:.."
+    "decagrammaton": "^0.1.1"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

@@ -1,1 +1,0 @@
-an example project that displays current weather at Innopolis
