@@ -1,7 +1,6 @@
 import { tokenize, TokenType, tokenTypeName } from './tokenize.ts';
 import type { Token } from './tokenize.ts';
 import { DecaParseError } from './errors.ts';
-import type { ParsedComponentType } from "../types/component/parsed-component.type.ts";
 
 export interface SourceLocation {
     start: { line: number; column: number };
@@ -13,7 +12,12 @@ export interface ScriptBlock {
     loc: SourceLocation;
 }
 
-export type TemplateNode = ElementNode | TextNode | ExpressionNode;
+export interface StyleBlock {
+    content: string;
+    loc: SourceLocation;
+}
+
+export type TemplateNode = ElementNode | TextNode | ExpressionNode | ConditionalNode | ForNode;
 
 export interface ElementNode {
     type: 'element';
@@ -36,6 +40,27 @@ export interface ExpressionNode {
     loc: SourceLocation;
 }
 
+export interface ConditionalBranch {
+    condition: string | null;
+    children: TemplateNode[];
+    loc: SourceLocation;
+}
+
+export interface ConditionalNode {
+    type: 'conditional';
+    branches: ConditionalBranch[];
+    loc: SourceLocation;
+}
+
+export interface ForNode {
+    type: 'for';
+    binding: string;
+    iterable: string;
+    key: string;
+    children: TemplateNode[];
+    loc: SourceLocation;
+}
+
 export type Attribute = StaticAttribute | ExpressionAttribute;
 
 export interface StaticAttribute {
@@ -50,6 +75,13 @@ export interface ExpressionAttribute {
     name: string;
     value: string;
     loc: SourceLocation;
+}
+
+export interface ParsedComponentType {
+    script: ScriptBlock | null;
+    style: StyleBlock | null;
+    template: TemplateNode[];
+    requires: Set<string>;
 }
 
 const VOID_ELEMENTS = new Set([
@@ -75,11 +107,14 @@ export class Parser {
 
     parse(): ParsedComponentType {
         const script = this.parseScript();
-        const template = this.parseChildren(null);
+        const requires = script ? extractRequires(this.tokens) : new Set<string>();
+        const style = this.parseStyle();
+        const template = this.parseTemplate();
 
+        this.skipWhitespaceText();
         this.expect(TokenType.EOF);
 
-        return { script, template };
+        return { script, style, template, requires };
     }
 
     private parseScript(): ScriptBlock | null {
@@ -98,6 +133,59 @@ export class Parser {
             content: contentToken?.value ?? '',
             loc: this.loc(startToken, endToken),
         };
+    }
+
+    private parseStyle(): StyleBlock | null {
+        if (this.current().type !== TokenType.StyleStart) {
+            return null;
+        }
+
+        const startToken = this.current();
+
+        this.position++;
+
+        const contentToken = this.consume(TokenType.StyleContent);
+        const endToken = this.expect(TokenType.StyleEnd);
+
+        return {
+            content: contentToken?.value ?? '',
+            loc: this.loc(startToken, endToken),
+        };
+    }
+
+    private parseTemplate(): TemplateNode[] {
+        this.skipWhitespaceText();
+
+        if (this.current().type === TokenType.TagOpen) {
+            const nameTokPos = this.position + 1;
+            const nameTok = this.tokens[nameTokPos];
+
+            if (nameTok && nameTok.type === TokenType.TagName && nameTok.value === 'template') {
+                this.expect(TokenType.TagOpen);
+                this.expect(TokenType.TagName);
+
+                if (this.current().type !== TokenType.TagClose) {
+                    this.error('<template> tag does not allow any attributes');
+                }
+
+                this.expect(TokenType.TagClose);
+
+                const children = this.parseChildren('template');
+
+                this.expect(TokenType.EndTagOpen);
+                const closeNameTok = this.expect(TokenType.TagName);
+
+                if (closeNameTok.value !== 'template') {
+                    this.error(`Expected </template>, got </${closeNameTok.value}>`);
+                }
+
+                this.expect(TokenType.TagClose);
+
+                return processDirectives(children, this.filename);
+            }
+        }
+
+        this.error('Expected <template> tag');
     }
 
     private parseChildren(parentTag: string | null): Array<TemplateNode> {
@@ -130,6 +218,8 @@ export class Parser {
                 children.push(this.parseElement());
             } else if (token.type === TokenType.ScriptStart) {
                 this.error('Only one script tag is allowed, and it must be at the top');
+            } else if (token.type === TokenType.StyleStart) {
+                this.error('Only one style tag is allowed');
             } else {
                 this.error(`Unexpected token ${tokenTypeName(token.type)}`);
             }
@@ -201,7 +291,7 @@ export class Parser {
             type: 'element',
             tag,
             attributes,
-            children,
+            children: processDirectives(children, this.filename),
             selfClosing: false,
             loc: this.loc(openTok, closeTagTok),
         };
@@ -250,6 +340,15 @@ export class Parser {
         return attrs;
     }
 
+    private skipWhitespaceText(): void {
+        while (
+            this.current().type === TokenType.Text &&
+            this.current().value.trim().length === 0
+        ) {
+            this.position++;
+        }
+    }
+
     private current(): Token {
         return this.tokens[this.position]!;
     }
@@ -286,4 +385,200 @@ export class Parser {
             end: { line: end.line, column: end.column },
         };
     }
+}
+
+function extractRequires(tokens: Array<Token>): Set<string> {
+    const requires = new Set<string>();
+    const scriptStartToken = tokens.find(t => t.type === TokenType.ScriptStart);
+
+    if (!scriptStartToken) return requires;
+
+    const tagText = scriptStartToken.value;
+    const regex = /requires\s*=\s*"([^"]*)"/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(tagText)) !== null) {
+        requires.add(match[1]!);
+    }
+
+    return requires;
+}
+
+function getDirectiveAttr(attrs: Array<Attribute>, name: string): Attribute | undefined {
+    return attrs.find(a => a.name === name);
+}
+
+function getDirectiveValue(attr: Attribute): string | null {
+    if (attr.type === 'expression-attribute') return attr.value;
+    if (attr.type === 'attribute' && typeof attr.value === 'string') return attr.value;
+    return null;
+}
+
+function stripDirectiveAttrs(attrs: Array<Attribute>): Array<Attribute> {
+    return attrs.filter(a =>
+        a.name !== ':if' &&
+        a.name !== ':else-if' &&
+        a.name !== ':else' &&
+        a.name !== ':for' &&
+        a.name !== ':key'
+    );
+}
+
+function processDirectives(children: Array<TemplateNode>, filename?: string): Array<TemplateNode> {
+    const result: Array<TemplateNode> = [];
+
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i]!;
+
+        if (child.type !== 'element') {
+            result.push(child);
+            continue;
+        }
+
+        const forAttr = getDirectiveAttr(child.attributes, ':for');
+        const keyAttr = getDirectiveAttr(child.attributes, ':key');
+
+        if (forAttr) {
+            if (!keyAttr) {
+                throw new DecaParseError(
+                    ':for requires a :key attribute',
+                    filename,
+                    child.loc.start.line,
+                    child.loc.start.column,
+                );
+            }
+
+            const forValue = getDirectiveValue(forAttr);
+            const keyValue = getDirectiveValue(keyAttr);
+
+            if (!forValue || !keyValue) {
+                throw new DecaParseError(
+                    ':for and :key must have expression values',
+                    filename,
+                    child.loc.start.line,
+                    child.loc.start.column,
+                );
+            }
+
+            const forMatch = forValue.match(/^(.+?)\s+in\s+(.+)$/);
+
+            if (!forMatch) {
+                throw new DecaParseError(
+                    ':for must use "binding in iterable" syntax',
+                    filename,
+                    child.loc.start.line,
+                    child.loc.start.column,
+                );
+            }
+
+            result.push({
+                type: 'for',
+                binding: forMatch[1]!.trim(),
+                iterable: forMatch[2]!.trim(),
+                key: keyValue,
+                children: [{
+                    ...child,
+                    attributes: stripDirectiveAttrs(child.attributes),
+                }],
+                loc: child.loc,
+            });
+
+            continue;
+        }
+
+        const ifAttr = getDirectiveAttr(child.attributes, ':if');
+
+        if (ifAttr) {
+            const condition = getDirectiveValue(ifAttr);
+
+            if (!condition) {
+                throw new DecaParseError(
+                    ':if must have an expression value',
+                    filename,
+                    child.loc.start.line,
+                    child.loc.start.column,
+                );
+            }
+
+            const branches: ConditionalBranch[] = [{
+                condition,
+                children: [{
+                    ...child,
+                    attributes: stripDirectiveAttrs(child.attributes),
+                }],
+                loc: child.loc,
+            }];
+
+            while (i + 1 < children.length) {
+                let nextIndex = i + 1;
+
+                while (nextIndex < children.length) {
+                    const candidate = children[nextIndex]!;
+                    if (candidate.type === 'text' && candidate.value.trim().length === 0) {
+                        nextIndex++;
+                        continue;
+                    }
+                    break;
+                }
+
+                const next = children[nextIndex];
+
+                if (!next || next.type !== 'element') break;
+
+                const elseIfAttr = getDirectiveAttr(next.attributes, ':else-if');
+                const elseAttr = getDirectiveAttr(next.attributes, ':else');
+
+                if (elseIfAttr) {
+                    const elseIfCond = getDirectiveValue(elseIfAttr);
+
+                    if (!elseIfCond) {
+                        throw new DecaParseError(
+                            ':else-if must have an expression value',
+                            filename,
+                            next.loc.start.line,
+                            next.loc.start.column,
+                        );
+                    }
+
+                    branches.push({
+                        condition: elseIfCond,
+                        children: [{
+                            ...next,
+                            attributes: stripDirectiveAttrs(next.attributes),
+                        }],
+                        loc: next.loc,
+                    });
+                    i = nextIndex;
+                } else if (elseAttr) {
+                    branches.push({
+                        condition: null,
+                        children: [{
+                            ...next,
+                            attributes: stripDirectiveAttrs(next.attributes),
+                        }],
+                        loc: next.loc,
+                    });
+                    i = nextIndex;
+                    break;
+                } else {
+                    break;
+                }
+            }
+
+            result.push({
+                type: 'conditional',
+                branches,
+                loc: {
+                    start: branches[0]!.loc.start,
+                    end: branches[branches.length - 1]!.loc.end,
+                },
+            });
+
+            continue;
+        }
+
+        result.push(child);
+    }
+
+    return result;
 }

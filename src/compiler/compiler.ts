@@ -1,9 +1,9 @@
 import { Parser } from "./parser.ts";
 import { compileScript } from "./script.ts";
 import { mount } from "../utils/render.ts";
-import type { ParsedComponentType } from "../types/component/parsed-component.type.ts";
+import type { ParsedComponentType, TemplateNode } from "./parser.ts";
 import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
-import type { TemplateNode } from "./parser.ts";
+import type { SafeElement, SafeDocument } from "../__temporary/gui/types.ts";
 
 export class Compiler {
   private readonly filename: string;
@@ -39,7 +39,7 @@ export class Compiler {
     return {
       template,
       scope,
-      mount: (container: HTMLElement) => mount(template, container, scope),
+      mount: (container: SafeElement, gui: SafeDocument) => mount(template, container, scope, gui),
     };
   }
 
@@ -66,5 +66,5 @@ export class Compiler {
 export interface CompiledComponent {
   template: Array<TemplateNode>;
   scope: Record<string, unknown>;
-  mount: (container: HTMLElement) => () => void;
+  mount: (container: SafeElement, gui: SafeDocument) => () => void;
 }

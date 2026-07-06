@@ -1,20 +1,23 @@
 import { mount } from "./utils/render.ts";
 import type { TemplateNode } from "./compiler/parser.ts";
 import type { ComponentDefinitionType } from "./types/component/component-definition.type.ts";
+import type { SafeElement, SafeDocument } from "./__temporary/gui/types.ts";
 
 export interface DecaModule {
   compile(globals: Record<string, unknown>): {
     template: Array<unknown>;
     scope: Record<string, unknown>;
-    mount: (container: HTMLElement) => () => void;
+    mount: (container: SafeElement, gui: SafeDocument) => () => void;
   };
   toComponent(globals: Record<string, unknown>): ComponentDefinitionType;
+  __styles?: string;
+  __requires?: Array<string>;
 }
 
 export interface AppInstance {
   provide(globals: Record<string, unknown>): AppInstance;
   component(name: string, mod: DecaModule): AppInstance;
-  mount(container: HTMLElement): () => void;
+  mount(container: SafeElement, gui: SafeDocument): () => void;
 }
 
 export function createApp(rootModule: DecaModule): AppInstance {
@@ -32,7 +35,7 @@ export function createApp(rootModule: DecaModule): AppInstance {
       return instance;
     },
 
-    mount(container: HTMLElement): () => void {
+    mount(container: SafeElement, gui: SafeDocument): () => void {
       const componentDefs: Record<string, ComponentDefinitionType> = {};
 
       for (const [name, mod] of registeredComponents) {
@@ -42,7 +45,13 @@ export function createApp(rootModule: DecaModule): AppInstance {
       const allGlobals = { ...providedGlobals, ...componentDefs };
       const compiled = rootModule.compile(allGlobals);
 
-      return mount(compiled.template as Array<TemplateNode>, container, compiled.scope, registeredComponents.size > 0 ? componentDefs : undefined);
+      return mount(
+        compiled.template as Array<TemplateNode>,
+        container,
+        compiled.scope,
+        gui,
+        registeredComponents.size > 0 ? componentDefs : undefined,
+      );
     },
   };
 

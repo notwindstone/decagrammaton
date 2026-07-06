@@ -1,18 +1,23 @@
 <script lang="ts">
-  import { $state } from "../../src";
+  import { $signal } from "../../src";
+  import Counter from "./counter.deca";
 
-  const input = $state("");
+  const input = $signal("");
 
   function handleChange(event) {
     input.value = event.target.value;
   }
 </script>
 
-<div class="container">
-  <h1>Decagrammaton</h1>
-  <Counter />
-  <input @change={handleChange} type="text" placeholder="type here..." />
-  <br />
-  <div>Input: { input.value }</div>
-  <button @click={() => input.value = "fah"}>huh</button>
-</div>
+<template>
+  <div class="container">
+    <h1>Decagrammaton</h1>
+    <Counter />
+    <input @change={handleChange} type="text" placeholder="type here..." />
+    <br />
+    <div>Input: { input.value }</div>
+    <button @click={() => input.value = "fah"}>huh</button>
+  </div>
+</template>
+
+

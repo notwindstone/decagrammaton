@@ -5,22 +5,26 @@ export const TokenType = {
     ScriptContent: 1,
     ScriptEnd: 2,
 
-    TagOpen: 3,
-    TagClose: 4,
-    TagSelfClose: 5,
-    EndTagOpen: 6,
-    TagName: 7,
+    StyleStart: 3,
+    StyleContent: 4,
+    StyleEnd: 5,
 
-    AttributeName: 8,
-    AttributeEquals: 9,
-    AttributeValue: 10,
+    TagOpen: 6,
+    TagClose: 7,
+    TagSelfClose: 8,
+    EndTagOpen: 9,
+    TagName: 10,
 
-    ExpressionStart: 11,
-    ExpressionContent: 12,
-    ExpressionEnd: 13,
+    AttributeName: 11,
+    AttributeEquals: 12,
+    AttributeValue: 13,
 
-    Text: 14,
-    EOF: 15,
+    ExpressionStart: 14,
+    ExpressionContent: 15,
+    ExpressionEnd: 16,
+
+    Text: 17,
+    EOF: 18,
 } as const;
 
 export type TokenType = (typeof TokenType)[keyof typeof TokenType];
@@ -36,13 +40,15 @@ const State = {
     Text: 0,
     ScriptOpen: 1,
     ScriptBody: 2,
-    Tag: 3,
-    EndTag: 4,
-    TagAttrs: 5,
-    AttrName: 6,
-    AttrValue: 7,
-    AttrExpression: 8,
-    Expression: 9,
+    StyleOpen: 3,
+    StyleBody: 4,
+    Tag: 5,
+    EndTag: 6,
+    TagAttrs: 7,
+    AttrName: 8,
+    AttrValue: 9,
+    AttrExpression: 10,
+    Expression: 11,
 } as const;
 
 type State = (typeof State)[keyof typeof State];
@@ -144,7 +150,7 @@ export function tokenize(source: string, filename?: string): Token[] {
 
                     if (lookaheadMatch('</')) {
                         const afterSlash = source.slice(pos + 2, pos + 10).toLowerCase();
-                        if (afterSlash.startsWith('script')) {
+                        if (afterSlash.startsWith('script') || afterSlash.startsWith('style')) {
                             break;
                         }
                         const startLine = line;
@@ -160,6 +166,24 @@ export function tokenize(source: string, filename?: string): Token[] {
                             const startLine = line;
                             const startCol = column;
                             state = State.ScriptOpen;
+                            startBuffer();
+                            bufferLine = startLine;
+                            bufferColumn = startCol;
+                        } else {
+                            const startLine = line;
+                            const startCol = column;
+                            advance(); // <
+                            emit(TokenType.TagOpen, '<', startLine, startCol);
+                            state = State.Tag;
+                            startBuffer();
+                        }
+                    } else if (lookaheadMatch('<style')) {
+                        const charAfterStyle = source[pos + 6];
+                        if (charAfterStyle === '>' || charAfterStyle === ' ' || charAfterStyle === '\t'
+                            || charAfterStyle === '\n' || charAfterStyle === '\r' || charAfterStyle === undefined) {
+                            const startLine = line;
+                            const startCol = column;
+                            state = State.StyleOpen;
                             startBuffer();
                             bufferLine = startLine;
                             bufferColumn = startCol;
@@ -214,6 +238,34 @@ export function tokenize(source: string, filename?: string): Token[] {
                     const startCol = column;
                     const tag = advanceN(9);
                     emit(TokenType.ScriptEnd, tag, startLine, startCol);
+                    state = State.Text;
+                    startBuffer();
+                } else {
+                    if (buffer.length === 0) startBuffer();
+                    buffer += advance();
+                }
+                break;
+            }
+
+            case State.StyleOpen: {
+                while (pos < source.length && ch() !== '>') {
+                    buffer += advance();
+                }
+                if (pos >= source.length) error('Unclosed <style> tag');
+                buffer += advance(); // >
+                emit(TokenType.StyleStart, buffer, bufferLine, bufferColumn);
+                state = State.StyleBody;
+                startBuffer();
+                break;
+            }
+
+            case State.StyleBody: {
+                if (lookaheadMatch('</style>')) {
+                    flushBuffer(TokenType.StyleContent);
+                    const startLine = line;
+                    const startCol = column;
+                    const tag = advanceN(8);
+                    emit(TokenType.StyleEnd, tag, startLine, startCol);
                     state = State.Text;
                     startBuffer();
                 } else {
@@ -371,6 +423,7 @@ export function tokenize(source: string, filename?: string): Token[] {
     }
 
     if (state === State.ScriptBody) error('Unclosed <script> tag');
+    if (state === State.StyleBody) error('Unclosed <style> tag');
     if (state === State.Expression || state === State.AttrExpression) error('Unclosed expression');
     if (state === State.Tag || state === State.TagAttrs || state === State.AttrName || state === State.AttrValue) {
         error('Unclosed tag');

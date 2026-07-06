@@ -12,6 +12,8 @@ export function malkuth(): Plugin {
       const parsed = new Parser(filename).put(source).parse();
       const scriptContent = parsed.script?.content ?? "";
       const templateJson = JSON.stringify(parsed.template);
+      const styleContent = parsed.style?.content ?? "";
+      const requiresArray = [...parsed.requires];
       const { imports, importedNames, cleanedScript } = extractImports(scriptContent);
 
       const decaComponentNames = new Set<string>();
@@ -53,6 +55,9 @@ const __scriptContent = ${JSON.stringify(cleanedScript)};
 const __importedNames = ${importedNamesJson};
 ${importsObject}
 
+export const __styles = ${JSON.stringify(styleContent)};
+export const __requires = ${JSON.stringify(requiresArray)};
+
 export function compile(globals) {
   const allNames = [...__importedNames, ...Object.keys(globals)];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
@@ -62,7 +67,7 @@ export function compile(globals) {
   return {
     template,
     scope,
-    mount: (container) => __mount(template, container, scope),
+    mount: (container, gui) => __mount(template, container, scope, gui),
   };
 }
 
@@ -76,7 +81,7 @@ export function toComponent(globals) {
   };
 }
 
-export default { compile, toComponent };
+export default { compile, toComponent, __styles, __requires };
 `,
         map: null,
       };
