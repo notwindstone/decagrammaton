@@ -1,9 +1,9 @@
 {
   "name": "decagrammaton",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "A reactive UI framework with single-file components",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
