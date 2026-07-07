@@ -9,7 +9,11 @@ declare module "*.deca" {
 
   interface ComponentDefinition {
     template: Array<unknown>;
-    factory: (props?: Record<string, unknown>) => Record<string, unknown>;
+    factory: (
+      props?: Record<string, unknown>,
+      provide?: (key: string, value: unknown) => void,
+      inject?: (key: string) => unknown,
+    ) => Record<string, unknown>;
   }
 
   const mod: {
@@ -46,7 +50,11 @@ declare module "decagrammaton" {
   }
 
   interface DecaModule {
-    compile(globals: Record<string, unknown>): CompiledComponent;
+    compile(
+      globals: Record<string, unknown>,
+      provideFn?: (key: string, value: unknown) => void,
+      injectFn?: (key: string) => unknown,
+    ): CompiledComponent;
     toComponent(globals: Record<string, unknown>): ComponentDefinition;
     __styles?: string;
     __requires?: Array<string>;

@@ -69,11 +69,12 @@ export function mount(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn {
   const cleanups: Array<CleanupFn> = [];
 
   for (const node of nodes) {
-    const cleanup = mountNode(node, container, scope, gui, components);
+    const cleanup = mountNode(node, container, scope, gui, components, context);
     if (cleanup) cleanups.push(cleanup);
   }
 
@@ -88,18 +89,19 @@ function mountNode(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn | null {
   switch (node.type) {
     case "element":
-      return mountElement(node, parent, scope, gui, components);
+      return mountElement(node, parent, scope, gui, components, context);
     case "text":
       return mountText(node, parent, gui);
     case "expression":
       return mountExpression(node, parent, scope, gui);
     case "conditional":
-      return mountConditional(node, parent, scope, gui, components);
+      return mountConditional(node, parent, scope, gui, components, context);
     case "for":
-      return mountFor(node, parent, scope, gui, components);
+      return mountFor(node, parent, scope, gui, components, context);
   }
 }
 
@@ -135,9 +137,10 @@ function mountElement(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn | null {
   if (isComponentTag(node.tag)) {
-    return mountComponent(node, parent, scope, gui, components);
+    return mountComponent(node, parent, scope, gui, components, context);
   }
 
   const element = createElement(node.tag, gui);
@@ -147,7 +150,7 @@ function mountElement(
   cleanups.push(...attrCleanups);
 
   for (const child of node.children) {
-    const cleanup = mountNode(child, element, scope, gui, components);
+    const cleanup = mountNode(child, element, scope, gui, components, context);
     if (cleanup) cleanups.push(cleanup);
   }
 
@@ -177,6 +180,7 @@ function mountComponent(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn | null {
   const definition = (scope[node.tag] ?? components?.[node.tag]) as ComponentDefinitionType | undefined;
 
@@ -192,9 +196,14 @@ function mountComponent(
     }
   }
 
-  const componentScope = definition.factory(props);
+  const parentContext = context ?? Object.create(null) as Record<string, unknown>;
+  const childContext = Object.create(parentContext) as Record<string, unknown>;
+  const provideFn = (key: string, value: unknown) => { childContext[key] = value; };
+  const injectFn = (key: string) => parentContext[key];
 
-  return mount(definition.template, parent, componentScope, gui, components);
+  const componentScope = definition.factory(props, provideFn, injectFn);
+
+  return mount(definition.template, parent, componentScope, gui, components, childContext);
 }
 
 function mountExpression(
@@ -222,6 +231,7 @@ function mountConditional(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn {
   const anchor = gui.createRawText();
   parent.appendChild(anchor);
@@ -261,7 +271,7 @@ function mountConditional(
 
     const cleanups: Array<CleanupFn> = [];
     for (const child of matchedBranch.children) {
-      const cleanup = mountNode(child, wrapper, scope, gui, components);
+      const cleanup = mountNode(child, wrapper, scope, gui, components, context);
       if (cleanup) cleanups.push(cleanup);
     }
 
@@ -299,6 +309,7 @@ function mountFor(
   scope: Record<string, unknown>,
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
+  context?: Record<string, unknown>,
 ): CleanupFn {
   const anchor = gui.createRawText();
   parent.appendChild(anchor);
@@ -332,7 +343,7 @@ function mountFor(
         const cleanups: Array<CleanupFn> = [];
 
         for (const child of node.children) {
-          const cleanup = mountNode(child, wrapper, itemScope, gui, components);
+          const cleanup = mountNode(child, wrapper, itemScope, gui, components, context);
           if (cleanup) cleanups.push(cleanup);
         }
 

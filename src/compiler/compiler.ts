@@ -4,7 +4,7 @@ import { Parser } from "./parser.ts";
 import { compileScript } from "./script.ts";
 import { mount } from "../utils/render.ts";
 import type { ParsedComponentType, TemplateNode } from "./parser.ts";
-import type { ComponentDefinitionType } from "../types/component/component-definition.type.ts";
+import type { ComponentDefinitionType, ProvideFn, InjectFn } from "../types/component/component-definition.type.ts";
 
 export class Compiler {
   private readonly filename: string;
@@ -21,7 +21,7 @@ export class Compiler {
     return this;
   }
 
-  compile(source: string): CompiledComponent {
+  compile(source: string, provideFn?: ProvideFn, injectFn?: InjectFn): CompiledComponent {
     this.parsed = new Parser(this.filename)
       .put(source)
       .parse();
@@ -29,10 +29,12 @@ export class Compiler {
     const globalNames: Array<string> = [...this.globals.keys()];
     const globalValues: Array<unknown> = [...this.globals.values()];
     const scriptContent: string = this.parsed.script?.content ?? "";
-    const compiledScript = compileScript(scriptContent, globalNames);
+    const provide = provideFn ?? (() => {});
+    const inject = injectFn ?? (() => undefined);
+    const compiledScript = compileScript(scriptContent, [...globalNames, "provide", "inject"]);
     const scope: Record<string, unknown> = {
       ...Object.fromEntries(this.globals),
-      ...compiledScript(...globalValues),
+      ...compiledScript(...globalValues, provide, inject),
     };
 
     const template = this.parsed.template;
@@ -52,16 +54,18 @@ export class Compiler {
     const globalNames: Array<string> = [...this.globals.keys()];
     const globalValues: Array<unknown> = [...this.globals.values()];
     const scriptContent: string = this.parsed.script?.content ?? "";
-    const compiledScript = compileScript(scriptContent, [...globalNames, "defineProps"]);
+    const compiledScript = compileScript(scriptContent, [...globalNames, "defineProps", "provide", "inject"]);
 
     return {
       template: this.parsed.template,
-      factory: (props?: Record<string, unknown>) => {
+      factory: (props?: Record<string, unknown>, provideFn?: ProvideFn, injectFn?: InjectFn) => {
         const defineProps = () => props ?? {};
+        const provide = provideFn ?? (() => {});
+        const inject = injectFn ?? (() => undefined);
 
         return {
           ...Object.fromEntries(this.globals),
-          ...compiledScript(...globalValues, defineProps),
+          ...compiledScript(...globalValues, defineProps, provide, inject),
         };
       },
     };

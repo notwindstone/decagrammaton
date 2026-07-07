@@ -66,12 +66,14 @@ function __buildFactory(scriptContent, paramNames, topNames) {
   return new Function(...paramNames, body);
 }
 
-export function compile(globals) {
-  const allNames = [...__importedNames, ...Object.keys(globals)];
+export function compile(globals, provideFn, injectFn) {
+  const allNames = [...__importedNames, ...Object.keys(globals), "provide", "inject"];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
   const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   const template = __template;
-  const scope = { ...__imports, ...globals, ...compiled(...allValues) };
+  const provide = provideFn || function() {};
+  const inject = injectFn || function() {};
+  const scope = { ...__imports, ...globals, ...compiled(...allValues, provide, inject) };
   return {
     template,
     scope,
@@ -80,14 +82,16 @@ export function compile(globals) {
 }
 
 export function toComponent(globals) {
-  const allNames = [...__importedNames, ...Object.keys(globals), "defineProps"];
+  const allNames = [...__importedNames, ...Object.keys(globals), "defineProps", "provide", "inject"];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
   const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   return {
     template: __template,
-    factory: (props) => {
+    factory: (props, provideFn, injectFn) => {
       const defineProps = () => props || {};
-      return { ...__imports, ...globals, ...compiled(...allValues, defineProps) };
+      const provide = provideFn || function() {};
+      const inject = injectFn || function() {};
+      return { ...__imports, ...globals, ...compiled(...allValues, defineProps, provide, inject) };
     },
   };
 }

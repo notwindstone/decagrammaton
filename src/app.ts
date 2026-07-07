@@ -5,7 +5,11 @@ import type { TemplateNode } from "./compiler/parser.ts";
 import type { ComponentDefinitionType } from "./types/component/component-definition.type.ts";
 
 export interface DecaModule {
-  compile(globals: Record<string, unknown>): {
+  compile(
+    globals: Record<string, unknown>,
+    provideFn?: (key: string, value: unknown) => void,
+    injectFn?: (key: string) => unknown,
+  ): {
     template: Array<unknown>;
     scope: Record<string, unknown>;
     mount: (container: SafeElement, gui: SafeDocument) => () => void;
@@ -43,8 +47,11 @@ export function createApp(rootModule: DecaModule): AppInstance {
         componentDefs[name] = mod.toComponent(providedGlobals);
       }
 
+      const rootContext = Object.create(null) as Record<string, unknown>;
+      const provideFn = (key: string, value: unknown) => { rootContext[key] = value; };
+      const injectFn = () => undefined;
       const allGlobals = { ...providedGlobals, ...componentDefs };
-      const compiled = rootModule.compile(allGlobals);
+      const compiled = rootModule.compile(allGlobals, provideFn, injectFn);
 
       return mount(
         compiled.template as Array<TemplateNode>,
@@ -52,6 +59,7 @@ export function createApp(rootModule: DecaModule): AppInstance {
         compiled.scope,
         gui,
         registeredComponents.size > 0 ? componentDefs : undefined,
+        rootContext,
       );
     },
   };

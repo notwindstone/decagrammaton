@@ -7,6 +7,9 @@
   import EmptyState from "./empty-state.deca";
   import ProgressFooter from "./progress-footer.deca";
 
+  const appName = $signal("Sensei's Task Board");
+  provide('appName', appName);
+
   const tasks = $signal([
     { id: 1, text: "Clear Lesson 25", done: false, priority: "high" },
     { id: 2, text: "Farm Aru's elephs", done: true, priority: "medium" },
