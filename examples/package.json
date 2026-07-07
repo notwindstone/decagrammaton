@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "ark-of-atrahasis": "^0.2.0",
-    "decagrammaton": "^0.2.2"
+    "ark-of-atrahasis": "^0.2.1",
+    "decagrammaton": "^0.4.0"
   },
   "devDependencies": {
     "@unocss/preset-wind3": "^66.7.4",
