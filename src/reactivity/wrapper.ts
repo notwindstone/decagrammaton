@@ -46,8 +46,4 @@ export function $effect(fn: () => void | (() => void)): () => void {
   return alienEffect(fn);
 }
 
-export function $props<T extends Record<string, unknown> = Record<string, unknown>>(): T {
-  return {} as T;
-}
-
 export { startBatch, endBatch };

@@ -1,5 +1,5 @@
 <script lang="ts">
-  const { onAdd, onInput, onPriorityChange } = $props();
+  const { onAdd, onInput, onPriorityChange } = defineProps();
 </script>
 
 <template>

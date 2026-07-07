@@ -80,14 +80,14 @@ export function compile(globals) {
 }
 
 export function toComponent(globals) {
-  const allNames = [...__importedNames, ...Object.keys(globals), "$props"];
+  const allNames = [...__importedNames, ...Object.keys(globals), "defineProps"];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
   const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   return {
     template: __template,
     factory: (props) => {
-      const $props = () => props || {};
-      return { ...__imports, ...globals, ...compiled(...allValues, $props) };
+      const defineProps = () => props || {};
+      return { ...__imports, ...globals, ...compiled(...allValues, defineProps) };
     },
   };
 }

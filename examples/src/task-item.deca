@@ -1,5 +1,5 @@
 <script lang="ts">
-  const { task, onToggle, onRemove } = $props();
+  const { task, onToggle, onRemove } = defineProps();
 </script>
 
 <template>
