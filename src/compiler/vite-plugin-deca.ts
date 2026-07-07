@@ -87,6 +87,7 @@ export function toComponent(globals) {
   const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   return {
     template: __template,
+    styles: __styles || undefined,
     factory: (props, provideFn, injectFn) => {
       const defineProps = () => props || {};
       const provide = provideFn || function() {};

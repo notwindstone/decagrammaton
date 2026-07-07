@@ -108,8 +108,14 @@ export class Parser {
     parse(): ParsedComponentType {
         const script = this.parseScript();
         const requires = script ? extractRequires(this.tokens) : new Set<string>();
-        const style = this.parseStyle();
+        this.skipWhitespaceText();
+        let style = this.parseStyle();
+        this.skipWhitespaceText();
         const template = this.parseTemplate();
+        if (!style) {
+            this.skipWhitespaceText();
+            style = this.parseStyle();
+        }
 
         this.skipWhitespaceText();
         this.expect(TokenType.EOF);

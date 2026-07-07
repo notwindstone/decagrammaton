@@ -2,9 +2,11 @@
 
 ## What is Decagrammaton?
 
-Decagrammaton is a declarative, lightweight, and reactive JavaScript framework that can run inside [Secure ECMAScript (SES)](https://github.com/nicolo-ribaudo/tc39-proposal-ses) compartments.
+Decagrammaton is a declarative, lightweight, and reactive JavaScript framework that can run inside [Secure ECMAScript (SES)](https://endojs.org/) compartments.
 
 It uses `.deca` single-file components — write your script logic and HTML template in one file, and Decagrammaton takes care of reactivity, DOM updates, and component composition.
+
+##
 
 ## Motivation
 
@@ -40,7 +42,7 @@ A `.deca` file has up to three sections:
 
 - **`<script>`** — optional, must appear at the top. Contains your component logic. Top-level declarations (`const`, `let`, `function`) are automatically available in the template — no explicit `return` needed.
 - **`<template>`** — required, wraps your HTML markup. Supports expressions `{...}`, event handlers `@event={...}`, directives `:if`, `:for`, and component tags `<MyComponent />`.
-- **`<style>`** — optional, contains CSS. The framework extracts it as metadata — your host application decides how to inject it.
+- **`<style>`** — optional, can appear before or after `<template>`. Contains CSS that the framework extracts as metadata — your host application decides how to inject it.
 
 ::: tip
 Decagrammaton does not include a built-in style solution. The recommended approach is atomic CSS via [UnoCSS](https://unocss.dev/) or [Tailwind CSS](https://tailwindcss.com/), applying classes directly in the template.

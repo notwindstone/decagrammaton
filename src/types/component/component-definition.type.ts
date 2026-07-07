@@ -5,6 +5,7 @@ export type InjectFn = (key: string) => unknown;
 
 export interface ComponentDefinitionType {
   template: Array<TemplateNode>;
+  styles?: string;
   factory: (
     props?: Record<string, unknown>,
     provide?: ProvideFn,

@@ -1,4 +1,3 @@
-
 // UnoCSS essentials
 import "virtual:uno.css";
 // Resets all styles in a Tailwind-like way

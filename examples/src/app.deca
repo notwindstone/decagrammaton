@@ -97,3 +97,10 @@
     </div>
   </div>
 </template>
+
+<style>
+  * {
+    background: black !important;
+  }
+</style>
+

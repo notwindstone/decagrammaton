@@ -5,7 +5,7 @@ import type {
   EventHandler,
   EventCleanup,
   HeadingLevel,
-  FormattingTag,
+  FormattingTag, SafeStyleSheet,
 } from "ark-of-atrahasis";
 import { effect } from "alien-signals";
 import type {
@@ -203,7 +203,19 @@ function mountComponent(
 
   const componentScope = definition.factory(props, provideFn, injectFn);
 
-  return mount(definition.template, parent, componentScope, gui, components, childContext);
+  let styleSheet: SafeStyleSheet | undefined;
+  if (definition.styles) {
+    styleSheet = gui.createStyle();
+
+    styleSheet.setCSS(definition.styles);
+  }
+
+  const templateCleanup = mount(definition.template, parent, componentScope, gui, components, childContext);
+
+  return () => {
+    templateCleanup();
+    if (styleSheet) styleSheet.remove();
+  };
 }
 
 function mountExpression(

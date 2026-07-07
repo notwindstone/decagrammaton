@@ -1,4 +1,4 @@
-import type { SafeElement, SafeDocument } from "ark-of-atrahasis";
+import type { SafeElement, SafeDocument, SafeStyleSheet } from "ark-of-atrahasis";
 
 import { mount } from "./utils/render.ts";
 import type { TemplateNode } from "./compiler/parser.ts";
@@ -53,7 +53,14 @@ export function createApp(rootModule: DecaModule): AppInstance {
       const allGlobals = { ...providedGlobals, ...componentDefs };
       const compiled = rootModule.compile(allGlobals, provideFn, injectFn);
 
-      return mount(
+      let styleSheet: SafeStyleSheet | undefined;
+      if (rootModule.__styles) {
+        styleSheet = gui.createStyle();
+
+        styleSheet.setCSS(rootModule.__styles);
+      }
+
+      const templateCleanup = mount(
         compiled.template as Array<TemplateNode>,
         container,
         compiled.scope,
@@ -61,6 +68,11 @@ export function createApp(rootModule: DecaModule): AppInstance {
         registeredComponents.size > 0 ? componentDefs : undefined,
         rootContext,
       );
+
+      return () => {
+        templateCleanup();
+        if (styleSheet) styleSheet.remove();
+      };
     },
   };
 
