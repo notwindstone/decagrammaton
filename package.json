@@ -2,8 +2,19 @@
   "name": "decagrammaton",
   "version": "0.3.0",
   "type": "module",
-  "description": "A reactive UI framework with single-file components",
+  "description": "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
   "license": "GPL-3.0-only",
+  "keywords": [
+    "javascript",
+    "framework",
+    "typescript",
+    "frontend",
+    "ses",
+    "bluearchive",
+    "cute-and-funny",
+    "hardened-js",
+    "decagrammaton"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
