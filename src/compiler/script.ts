@@ -1,3 +1,6 @@
+import * as acorn from "acorn";
+import type { ImportDeclaration, Pattern, VariableDeclaration, FunctionDeclaration } from "acorn";
+
 export interface ExtractedImports {
   imports: Array<string>;
   importedNames: Array<string>;
@@ -5,177 +8,29 @@ export interface ExtractedImports {
 }
 
 export function extractImports(script: string): ExtractedImports {
+  let ast: acorn.Program;
+
+  try {
+    ast = acorn.parse(script, { ecmaVersion: "latest", sourceType: "module" });
+  } catch {
+    return { imports: [], importedNames: [], cleanedScript: script };
+  }
+
   const imports: Array<string> = [];
   const importedNames: Array<string> = [];
   const removals: Array<{ start: number; end: number }> = [];
-  let i = 0;
 
-  while (i < script.length) {
-    const ch = script[i]!;
+  for (const node of ast.body) {
+    if (node.type !== "ImportDeclaration") continue;
 
-    if (ch === "/" && script[i + 1] === "/") {
-      while (i < script.length && script[i] !== "\n") i++;
-      continue;
+    const decl = node as ImportDeclaration;
+    imports.push(script.slice(decl.start, decl.end));
+
+    for (const spec of decl.specifiers) {
+      importedNames.push(spec.local.name);
     }
 
-    if (ch === "/" && script[i + 1] === "*") {
-      i += 2;
-      while (i < script.length && !(script[i] === "*" && script[i + 1] === "/")) i++;
-      i += 2;
-      continue;
-    }
-
-    if (ch === '"' || ch === "'" || ch === "`") {
-      const quote = ch;
-      i++;
-      while (i < script.length && script[i] !== quote) {
-        if (script[i] === "\\") i++;
-        i++;
-      }
-      i++;
-      continue;
-    }
-
-    if (!matchKeyword(script, i, "import")) {
-      i++;
-      continue;
-    }
-
-    if (script[i + "import".length] === "(") {
-      i += "import".length;
-      continue;
-    }
-
-    const start = i;
-    i += "import".length;
-    i = skipWhitespace(script, i);
-
-    const afterImport = script[i];
-
-    if (afterImport === '"' || afterImport === "'") {
-      const quote = afterImport;
-      i++;
-      while (i < script.length && script[i] !== quote) i++;
-      i++;
-      i = skipPastSemicolon(script, i);
-
-      imports.push(script.slice(start, i));
-      removals.push({ start, end: i });
-      continue;
-    }
-
-    if (afterImport === "{") {
-      i++;
-      const names = readNamedImports(script, i);
-      i = names.end;
-      i = skipWhitespace(script, i);
-
-      if (matchKeyword(script, i, "from")) {
-        i += "from".length;
-        i = skipWhitespace(script, i);
-        i = skipStringLiteral(script, i);
-        i = skipPastSemicolon(script, i);
-
-        imports.push(script.slice(start, i));
-        importedNames.push(...names.bindings);
-        removals.push({ start, end: i });
-      }
-
-      continue;
-    }
-
-    if (afterImport === "*") {
-      i++;
-      i = skipWhitespace(script, i);
-
-      if (matchKeyword(script, i, "as")) {
-        i += "as".length;
-        i = skipWhitespace(script, i);
-        const name = readIdentifier(script, i);
-
-        if (name) {
-          i += name.length;
-          i = skipWhitespace(script, i);
-
-          if (matchKeyword(script, i, "from")) {
-            i += "from".length;
-            i = skipWhitespace(script, i);
-            i = skipStringLiteral(script, i);
-            i = skipPastSemicolon(script, i);
-
-            imports.push(script.slice(start, i));
-            importedNames.push(name);
-            removals.push({ start, end: i });
-          }
-        }
-      }
-
-      continue;
-    }
-
-    const defaultName = readIdentifier(script, i);
-
-    if (defaultName) {
-      i += defaultName.length;
-      i = skipWhitespace(script, i);
-
-      if (script[i] === ",") {
-        i++;
-        i = skipWhitespace(script, i);
-        const bindings = [defaultName];
-
-        if (script[i] === "{") {
-          i++;
-          const names = readNamedImports(script, i);
-          i = names.end;
-          bindings.push(...names.bindings);
-        } else if (script[i] === "*") {
-          i++;
-          i = skipWhitespace(script, i);
-
-          if (matchKeyword(script, i, "as")) {
-            i += "as".length;
-            i = skipWhitespace(script, i);
-            const nsName = readIdentifier(script, i);
-
-            if (nsName) {
-              i += nsName.length;
-              bindings.push(nsName);
-            }
-          }
-        }
-
-        i = skipWhitespace(script, i);
-
-        if (matchKeyword(script, i, "from")) {
-          i += "from".length;
-          i = skipWhitespace(script, i);
-          i = skipStringLiteral(script, i);
-          i = skipPastSemicolon(script, i);
-
-          imports.push(script.slice(start, i));
-          importedNames.push(...bindings);
-          removals.push({ start, end: i });
-        }
-
-        continue;
-      }
-
-      if (matchKeyword(script, i, "from")) {
-        i += "from".length;
-        i = skipWhitespace(script, i);
-        i = skipStringLiteral(script, i);
-        i = skipPastSemicolon(script, i);
-
-        imports.push(script.slice(start, i));
-        importedNames.push(defaultName);
-        removals.push({ start, end: i });
-      }
-
-      continue;
-    }
-
-    i++;
+    removals.push({ start: decl.start, end: decl.end });
   }
 
   let cleanedScript = "";
@@ -191,163 +46,56 @@ export function extractImports(script: string): ExtractedImports {
   return { imports, importedNames, cleanedScript };
 }
 
-function readNamedImports(source: string, pos: number): { bindings: Array<string>; end: number } {
-  const bindings: Array<string> = [];
-
-  while (pos < source.length && source[pos] !== "}") {
-    pos = skipWhitespace(source, pos);
-
-    if (source[pos] === "}") break;
-
-    if (source[pos] === ",") {
-      pos++;
-      continue;
-    }
-
-    const name = readIdentifier(source, pos);
-
-    if (!name) {
-      pos++;
-      continue;
-    }
-
-    pos += name.length;
-    pos = skipWhitespace(source, pos);
-
-    if (matchKeyword(source, pos, "as")) {
-      pos += "as".length;
-      pos = skipWhitespace(source, pos);
-      const alias = readIdentifier(source, pos);
-
-      if (alias) {
-        bindings.push(alias);
-        pos += alias.length;
+function collectBindingNames(pattern: Pattern, names: Array<string>): void {
+  switch (pattern.type) {
+    case "Identifier":
+      names.push(pattern.name);
+      break;
+    case "ObjectPattern":
+      for (const prop of pattern.properties) {
+        if (prop.type === "RestElement") {
+          collectBindingNames(prop.argument as Pattern, names);
+        } else {
+          collectBindingNames(prop.value as Pattern, names);
+        }
       }
-    } else {
-      bindings.push(name);
-    }
+      break;
+    case "ArrayPattern":
+      for (const element of pattern.elements) {
+        if (element) collectBindingNames(element, names);
+      }
+      break;
+    case "AssignmentPattern":
+      collectBindingNames(pattern.left, names);
+      break;
+    case "RestElement":
+      collectBindingNames(pattern.argument as Pattern, names);
+      break;
   }
-
-  if (pos < source.length && source[pos] === "}") pos++;
-
-  return { bindings, end: pos };
-}
-
-function skipStringLiteral(source: string, pos: number): number {
-  const quote = source[pos];
-
-  if (quote !== '"' && quote !== "'") return pos;
-
-  pos++;
-
-  while (pos < source.length && source[pos] !== quote) {
-    if (source[pos] === "\\") pos++;
-    pos++;
-  }
-
-  if (pos < source.length) pos++;
-
-  return pos;
-}
-
-function skipPastSemicolon(source: string, pos: number): number {
-  const saved = pos;
-  pos = skipWhitespace(source, pos);
-
-  if (pos < source.length && source[pos] === ";") return pos + 1;
-
-  return saved;
 }
 
 export function extractTopLevelNames(script: string): Array<string> {
+  let ast: acorn.Program;
+
+  try {
+    ast = acorn.parse(script, { ecmaVersion: "latest", sourceType: "module", allowReturnOutsideFunction: true });
+  } catch {
+    return [];
+  }
+
   const names: Array<string> = [];
-  let braceDepth = 0;
-  let i = 0;
 
-  while (i < script.length) {
-    const ch = script[i]!;
+  for (const node of ast.body) {
+    if (node.type === "VariableDeclaration") {
+      const decl = node as VariableDeclaration;
 
-    if (ch === "/" && script[i + 1] === "/") {
-      while (i < script.length && script[i] !== "\n") i++;
-      continue;
-    }
-
-    if (ch === "/" && script[i + 1] === "*") {
-      i += 2;
-      while (i < script.length && !(script[i] === "*" && script[i + 1] === "/")) i++;
-      i += 2;
-      continue;
-    }
-
-    if (ch === '"' || ch === "'" || ch === "`") {
-      const quote = ch;
-      i++;
-      while (i < script.length && script[i] !== quote) {
-        if (script[i] === "\\") i++;
-        i++;
+      for (const declarator of decl.declarations) {
+        collectBindingNames(declarator.id as Pattern, names);
       }
-      i++;
-      continue;
+    } else if (node.type === "FunctionDeclaration") {
+      const decl = node as FunctionDeclaration;
+      if (decl.id) names.push(decl.id.name);
     }
-
-    if (ch === "{") { braceDepth++; i++; continue; }
-    if (ch === "}") { braceDepth--; i++; continue; }
-    if (braceDepth > 0) { i++; continue; }
-
-    if (matchKeyword(script, i, "let") || matchKeyword(script, i, "var") || matchKeyword(script, i, "const")) {
-      const keyword = matchKeyword(script, i, "const") ? "const" : (matchKeyword(script, i, "let") ? "let" : "var");
-      i += keyword.length;
-      i = skipWhitespace(script, i);
-
-      if (script[i] === "{") {
-        i++;
-        while (i < script.length && script[i] !== "}") {
-          i = skipWhitespace(script, i);
-          if (script[i] === ",") { i++; continue; }
-          if (script[i] === "}") break;
-          const name = readIdentifier(script, i);
-          if (!name) { i++; continue; }
-          i += name.length;
-          i = skipWhitespace(script, i);
-          if (script[i] === ":") {
-            i++;
-            i = skipWhitespace(script, i);
-            const alias = readIdentifier(script, i);
-            if (alias) { names.push(alias); i += alias.length; }
-          } else {
-            names.push(name);
-          }
-        }
-        if (i < script.length && script[i] === "}") i++;
-      } else if (script[i] === "[") {
-        i++;
-        while (i < script.length && script[i] !== "]") {
-          i = skipWhitespace(script, i);
-          if (script[i] === ",") { i++; continue; }
-          if (script[i] === "]") break;
-          const name = readIdentifier(script, i);
-          if (!name) { i++; continue; }
-          names.push(name);
-          i += name.length;
-        }
-        if (i < script.length && script[i] === "]") i++;
-      } else {
-        const name = readIdentifier(script, i);
-        if (name) names.push(name);
-      }
-
-      continue;
-    }
-
-    if (matchKeyword(script, i, "function")) {
-      i += "function".length;
-      i = skipWhitespace(script, i);
-      const name = readIdentifier(script, i);
-      if (name) names.push(name);
-      continue;
-    }
-
-    i++;
   }
 
   return names;
@@ -361,34 +109,4 @@ export function compileScript(
   const body = `${script}\nreturn { ${names.join(", ")} };`;
 
   return new Function(...globals, body) as (...args: Array<unknown>) => Record<string, unknown>;
-}
-
-function matchKeyword(source: string, pos: number, keyword: string): boolean {
-  if (pos + keyword.length > source.length) return false;
-
-  for (let j = 0; j < keyword.length; j++) {
-    if (source[pos + j] !== keyword[j]) return false;
-  }
-
-  const after = source[pos + keyword.length];
-
-  if (after && /[a-zA-Z0-9_$]/.test(after)) return false;
-
-  const before = source[pos - 1];
-
-  if (before && /[a-zA-Z0-9_$]/.test(before)) return false;
-
-  return true;
-}
-
-function skipWhitespace(source: string, pos: number): number {
-  while (pos < source.length && /\s/.test(source[pos]!)) pos++;
-
-  return pos;
-}
-
-function readIdentifier(source: string, pos: number): string | null {
-  const match = source.slice(pos).match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/);
-
-  return match ? match[0] : null;
 }
