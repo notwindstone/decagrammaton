@@ -1,7 +1,5 @@
 # Examples
 
-Here are some `.deca` component examples to get a feel for the framework.
-
 ## Counter
 
 A minimal reactive counter:
