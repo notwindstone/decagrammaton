@@ -1,28 +1,49 @@
 import { defineConfig } from 'vitepress'
 
-// https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "Decagrammaton",
   description: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
   themeConfig: {
-    // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Examples', link: '/markdown-examples' }
+      { text: 'Get Started', link: '/get-started/introduction' },
     ],
 
     sidebar: [
       {
-        text: 'Examples',
+        text: 'Get Started',
         items: [
-          { text: 'Markdown Examples', link: '/markdown-examples' },
-          { text: 'Runtime API Examples', link: '/api-examples' }
-        ]
-      }
+          { text: 'Introduction', link: '/get-started/introduction' },
+          { text: 'Examples', link: '/get-started/examples' },
+        ],
+      },
+      {
+        text: 'Reactivity',
+        items: [
+          { text: 'States', link: '/reactivity/states' },
+          { text: 'Computed States', link: '/reactivity/computed' },
+          { text: 'Effects', link: '/reactivity/effects' },
+        ],
+      },
+      {
+        text: 'Properties',
+        items: [
+          { text: 'Passing Down', link: '/properties/passing-down' },
+          { text: 'Injection', link: '/properties/injection' },
+        ],
+      },
+      {
+        text: 'Template Logic',
+        items: [
+          { text: 'Attributes', link: '/logic/attributes' },
+          { text: 'Conditional Rendering', link: '/logic/conditional-rendering' },
+          { text: 'Iteration', link: '/logic/iteration' },
+        ],
+      },
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/vuejs/vitepress' }
-    ]
-  }
+      { icon: 'github', link: 'https://github.com/notwindstone/decagrammaton' },
+    ],
+  },
 })

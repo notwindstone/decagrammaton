@@ -1,5 +1,4 @@
 ---
-# https://vitepress.dev/reference/default-theme-home-page
 layout: home
 
 hero:
@@ -9,10 +8,10 @@ hero:
   actions:
     - theme: brand
       text: Get Started
-      link: /markdown-examples
+      link: /get-started/introduction
     - theme: alt
-      text: Demo
-      link: /api-examples
+      text: Examples
+      link: /get-started/examples
 
 features:
   - title: Single-File Components
@@ -20,7 +19,5 @@ features:
   - title: Declarative
     details: Describe your UI in templates based on app states
   - title: Reactive
-    link: /asdf
     details: The reactivity system is based on the lightest signal library (alien-signals)
 ---
-
