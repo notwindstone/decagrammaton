@@ -4,7 +4,10 @@ layout: home
 hero:
   name: "Decagrammaton"
   text: "A UI framework that can run in Secure ECMAScript compartments"
-  tagline: <3
+  tagline: Made for a Kaede Minecraft Launcher <3
+  image:
+    src: logo.png
+    alt: My Project Logo
   actions:
     - theme: brand
       text: Get Started

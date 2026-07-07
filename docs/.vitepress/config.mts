@@ -3,6 +3,9 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "Decagrammaton",
   description: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
+  head: [
+    ['link', { rel: 'icon', href: '/favicon.png' }]
+  ],
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
