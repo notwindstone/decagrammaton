@@ -144,12 +144,12 @@
 :root.dark {
   --vp-c-default-1: #354758;
   --vp-c-default-2: #273647;
-  --vp-c-default-3: #1c2633;
+  --vp-c-default-3: #0f1821;
   --vp-c-default-soft: rgba(53, 71, 88, 0.16);
 
   --vp-c-bg: #0b121a;
-  --vp-c-bg-alt: #1c2633;
-  --vp-c-bg-elv: #1c2633;
+  --vp-c-bg-alt: #0f1821;
+  --vp-c-bg-elv: #0f1821;
   --vp-c-bg-soft: rgba(39, 54, 71, 0.16);
 }
 

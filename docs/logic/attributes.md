@@ -1,7 +1,5 @@
 # Attributes
 
-Decagrammaton uses a simple convention to distinguish between static attributes, dynamic attributes, and event handlers in templates.
-
 ## Static Attributes
 
 Plain HTML attributes are passed through as-is:
@@ -65,29 +63,29 @@ Prefix an attribute name with `@` to bind an event handler:
 
 The handler receives a `SafeEvent` DTO (not a native `Event` object) when running inside a SES compartment. Available events:
 
-| Attribute | Event |
-|---|---|
-| `@click` | click |
-| `@dblclick` | dblclick |
-| `@mousedown` | mousedown |
-| `@mouseup` | mouseup |
-| `@mouseenter` | mouseenter |
-| `@mouseleave` | mouseleave |
-| `@mousemove` | mousemove |
+| Attribute      | Event       |
+|----------------|-------------|
+| `@click`       | click       |
+| `@dblclick`    | dblclick    |
+| `@mousedown`   | mousedown   |
+| `@mouseup`     | mouseup     |
+| `@mouseenter`  | mouseenter  |
+| `@mouseleave`  | mouseleave  |
+| `@mousemove`   | mousemove   |
 | `@pointerdown` | pointerdown |
-| `@pointerup` | pointerup |
+| `@pointerup`   | pointerup   |
 | `@pointermove` | pointermove |
 | `@contextmenu` | contextmenu |
-| `@keydown` | keydown |
-| `@keyup` | keyup |
-| `@focus` | focus |
-| `@blur` | blur |
-| `@touchstart` | touchstart |
-| `@touchend` | touchend |
-| `@touchmove` | touchmove |
-| `@scroll` | scroll |
-| `@change` | change |
-| `@input` | input |
+| `@keydown`     | keydown     |
+| `@keyup`       | keyup       |
+| `@focus`       | focus       |
+| `@blur`        | blur        |
+| `@touchstart`  | touchstart  |
+| `@touchend`    | touchend    |
+| `@touchmove`   | touchmove   |
+| `@scroll`      | scroll      |
+| `@change`      | change      |
+| `@input`       | input       |
 
 ### Inline handlers
 

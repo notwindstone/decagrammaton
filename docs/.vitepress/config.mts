@@ -36,7 +36,7 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Template Logic',
+        text: 'Logic',
         items: [
           { text: 'Attributes', link: '/logic/attributes' },
           { text: 'Conditional Rendering', link: '/logic/conditional-rendering' },
