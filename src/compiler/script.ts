@@ -298,8 +298,44 @@ export function extractTopLevelNames(script: string): Array<string> {
       const keyword = matchKeyword(script, i, "const") ? "const" : (matchKeyword(script, i, "let") ? "let" : "var");
       i += keyword.length;
       i = skipWhitespace(script, i);
-      const name = readIdentifier(script, i);
-      if (name) names.push(name);
+
+      if (script[i] === "{") {
+        i++;
+        while (i < script.length && script[i] !== "}") {
+          i = skipWhitespace(script, i);
+          if (script[i] === ",") { i++; continue; }
+          if (script[i] === "}") break;
+          const name = readIdentifier(script, i);
+          if (!name) { i++; continue; }
+          i += name.length;
+          i = skipWhitespace(script, i);
+          if (script[i] === ":") {
+            i++;
+            i = skipWhitespace(script, i);
+            const alias = readIdentifier(script, i);
+            if (alias) { names.push(alias); i += alias.length; }
+          } else {
+            names.push(name);
+          }
+        }
+        if (i < script.length && script[i] === "}") i++;
+      } else if (script[i] === "[") {
+        i++;
+        while (i < script.length && script[i] !== "]") {
+          i = skipWhitespace(script, i);
+          if (script[i] === ",") { i++; continue; }
+          if (script[i] === "]") break;
+          const name = readIdentifier(script, i);
+          if (!name) { i++; continue; }
+          names.push(name);
+          i += name.length;
+        }
+        if (i < script.length && script[i] === "]") i++;
+      } else {
+        const name = readIdentifier(script, i);
+        if (name) names.push(name);
+      }
+
       continue;
     }
 

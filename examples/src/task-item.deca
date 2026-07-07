@@ -1,0 +1,32 @@
+<script lang="ts">
+  const { task, onToggle, onRemove } = $props();
+</script>
+
+<template>
+  <div class={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${task.done ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+    <button
+      class={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition ${task.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-indigo-400'}`}
+      @click={() => onToggle(task.id)}
+    >
+      <span :if={task.done}>✓</span>
+    </button>
+
+    <div class="flex-1">
+      <span class={`text-lg ${task.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+        { task.text }
+      </span>
+      <span
+        class={`ml-2 text-xs font-bold px-2 py-1 rounded-full uppercase ${task.done ? 'text-gray-700' : task.priority === 'high' ? 'bg-red-200 text-red-700' : task.priority === 'medium' ? 'bg-yellow-200 text-yellow-700' : 'bg-blue-200 text-blue-700'}`}
+      >
+        { task.priority }
+      </span>
+    </div>
+
+    <button
+      class="text-gray-400 hover:text-red-500 text-xl font-bold transition"
+      @click={() => onRemove(task.id)}
+    >
+      ×
+    </button>
+  </div>
+</template>

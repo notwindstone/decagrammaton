@@ -1,6 +1,6 @@
 import type { Plugin } from "vite";
 import { Parser } from "./parser.ts";
-import { extractImports } from "./script.ts";
+import { extractImports, extractTopLevelNames } from "./script.ts";
 
 export function malkuth(): Plugin {
   return {
@@ -45,23 +45,31 @@ export function malkuth(): Plugin {
         ? `const __imports = { ${importEntries.join(", ")} };`
         : "const __imports = {};";
 
+      const topLevelNames = extractTopLevelNames(cleanedScript);
+      const topLevelNamesJson = JSON.stringify(topLevelNames);
+
       return {
         code: `
-import { compileScript } from "decagrammaton/internal";
 import { mount as __mount } from "decagrammaton";
 ${hoistedImports}
 const __template = ${templateJson};
 const __scriptContent = ${JSON.stringify(cleanedScript)};
 const __importedNames = ${importedNamesJson};
+const __topLevelNames = ${topLevelNamesJson};
 ${importsObject}
 
 export const __styles = ${JSON.stringify(styleContent)};
 export const __requires = ${JSON.stringify(requiresArray)};
 
+function __buildFactory(scriptContent, paramNames, topNames) {
+  const body = scriptContent + "\\nreturn { " + topNames.join(", ") + " };";
+  return new Function(...paramNames, body);
+}
+
 export function compile(globals) {
   const allNames = [...__importedNames, ...Object.keys(globals)];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
-  const compiled = compileScript(__scriptContent, allNames);
+  const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   const template = __template;
   const scope = { ...__imports, ...globals, ...compiled(...allValues) };
   return {
@@ -72,12 +80,15 @@ export function compile(globals) {
 }
 
 export function toComponent(globals) {
-  const allNames = [...__importedNames, ...Object.keys(globals)];
+  const allNames = [...__importedNames, ...Object.keys(globals), "$props"];
   const allValues = [...__importedNames.map(n => __imports[n]), ...Object.values(globals)];
-  const compiled = compileScript(__scriptContent, allNames);
+  const compiled = __buildFactory(__scriptContent, allNames, __topLevelNames);
   return {
     template: __template,
-    factory: () => ({ ...__imports, ...globals, ...compiled(...allValues) }),
+    factory: (props) => {
+      const $props = () => props || {};
+      return { ...__imports, ...globals, ...compiled(...allValues, $props) };
+    },
   };
 }
 

@@ -1,0 +1,25 @@
+<script lang="ts">
+  const { onAdd, onInput, onPriorityChange } = $props();
+</script>
+
+<template>
+  <div class="flex gap-3 mb-4">
+    <input
+      type="text"
+      placeholder="New mission..."
+      class="flex-1 px-4 py-3 rounded-xl border-2 border-indigo-200 focus:border-indigo-400 outline-none text-lg transition"
+      @input={onInput}
+    />
+    <select class="px-3 py-3 rounded-xl border-2 border-indigo-200 text-sm font-medium" @change={onPriorityChange}>
+      <option value="low">Low</option>
+      <option value="medium" selected>Med</option>
+      <option value="high">High</option>
+    </select>
+    <button
+      class="px-6 py-3 bg-indigo-500 text-white rounded-xl font-bold text-lg hover:bg-indigo-600 active:scale-95 transition"
+      @click={onAdd}
+    >
+      +
+    </button>
+  </div>
+</template>

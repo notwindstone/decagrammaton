@@ -1,7 +1,11 @@
 <script lang="ts">
   import { $signal, $computed } from "../../src";
   import TaskHeader from "./task-header.deca";
+  import TaskInput from "./task-input.deca";
+  import FilterBar from "./filter-bar.deca";
+  import TaskItem from "./task-item.deca";
   import EmptyState from "./empty-state.deca";
+  import ProgressFooter from "./progress-footer.deca";
 
   const tasks = $signal([
     { id: 1, text: "Clear Lesson 25", done: false, priority: "high" },
@@ -62,46 +66,8 @@
       <TaskHeader />
 
       <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
-        <div class="flex gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="New mission..."
-            class="flex-1 px-4 py-3 rounded-xl border-2 border-indigo-200 focus:border-indigo-400 outline-none text-lg transition"
-            @input={handleInput}
-          />
-          <select class="px-3 py-3 rounded-xl border-2 border-indigo-200 text-sm font-medium" @change={handlePriorityChange}>
-            <option value="low">Low</option>
-            <option value="medium" selected>Med</option>
-            <option value="high">High</option>
-          </select>
-          <button
-            class="px-6 py-3 bg-indigo-500 text-white rounded-xl font-bold text-lg hover:bg-indigo-600 active:scale-95 transition"
-            @click={addTask}
-          >
-            +
-          </button>
-        </div>
-
-        <div class="flex gap-2 mb-6">
-          <button
-            class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'all' ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            @click={() => filter.value = 'all'}
-          >
-            All ({ stats.value.total })
-          </button>
-          <button
-            class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'active' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            @click={() => filter.value = 'active'}
-          >
-            Active ({ stats.value.remaining })
-          </button>
-          <button
-            class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'done' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            @click={() => filter.value = 'done'}
-          >
-            Done ({ stats.value.done })
-          </button>
-        </div>
+        <TaskInput onAdd={addTask} onInput={handleInput} onPriorityChange={handlePriorityChange} />
+        <FilterBar filter={filter} stats={stats} />
 
         <div :if={filteredTasks.value.length === 0}>
           <EmptyState />
@@ -109,56 +75,18 @@
 
         <div :else>
           <div class="space-y-3">
-            <div
-              :for={(task, index) in filteredTasks.value}
+            <TaskItem
+              :for={task in filteredTasks.value}
               :key={task.id}
-              class={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${task.done ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}
-            >
-              <button
-                class={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition ${task.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-indigo-400'}`}
-                @click={() => toggleTask(task.id)}
-              >
-                <span :if={task.done}>✓</span>
-              </button>
-
-              <div class="flex-1">
-                <span class={`text-lg ${task.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                  { task.text }
-                </span>
-                <span
-                  class={`ml-2 text-xs font-bold px-2 py-1 rounded-full uppercase ${task.done ? 'text-gray-700' : task.priority === 'high' ? 'bg-red-200 text-red-700' : task.priority === 'medium' ? 'bg-yellow-200 text-yellow-700' : 'bg-blue-200 text-blue-700'}`}
-                >
-                  { task.priority }
-                </span>
-              </div>
-
-              <button
-                class="text-gray-400 hover:text-red-500 text-xl font-bold transition"
-                @click={() => removeTask(task.id)}
-              >
-                ×
-              </button>
-            </div>
+              task={task}
+              onToggle={toggleTask}
+              onRemove={removeTask}
+            />
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-lg p-6">
-        <div class="flex justify-between items-center">
-          <div>
-            <span class="text-3xl font-bold text-indigo-600">{ stats.value.done }</span>
-            <span class="text-gray-400 ml-1">/ { stats.value.total }</span>
-            <span class="text-gray-500 ml-2">missions cleared</span>
-          </div>
-          <div class="w-48 h-4 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              class="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all"
-              style={{ width: `${stats.value.total > 0 ? Math.round(stats.value.done / stats.value.total * 100) : 0}%` }}
-            >
-            </div>
-          </div>
-        </div>
-      </div>
+      <ProgressFooter stats={stats} />
 
       <p class="text-center text-gray-400 mt-6 text-sm">
         Built with Decagrammaton ♡ Powered by Schale

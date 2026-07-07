@@ -182,7 +182,17 @@ function mountComponent(
 
   if (!definition) return null;
 
-  const componentScope = definition.factory();
+  const props: Record<string, unknown> = {};
+
+  for (const attr of node.attributes) {
+    if (attr.type === "expression-attribute") {
+      props[attr.name] = evaluateExpression(attr.value, scope);
+    } else if (attr.type === "attribute") {
+      props[attr.name] = attr.value;
+    }
+  }
+
+  const componentScope = definition.factory(props);
 
   return mount(definition.template, parent, componentScope, gui, components);
 }

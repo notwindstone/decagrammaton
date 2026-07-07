@@ -9,7 +9,7 @@ declare module "*.deca" {
 
   interface ComponentDefinition {
     template: Array<unknown>;
-    factory: () => Record<string, unknown>;
+    factory: (props?: Record<string, unknown>) => Record<string, unknown>;
   }
 
   const mod: {
@@ -28,6 +28,7 @@ declare module "decagrammaton" {
   export function $signal<T>(initialValue: T): SignalType<T>;
   export function $computed<T>(getter: () => T): ComputedType<T>;
   export function $effect(fn: () => void | (() => void)): () => void;
+  export function $props<T extends Record<string, unknown> = Record<string, unknown>>(): T;
   export function startBatch(): void;
   export function endBatch(): void;
 

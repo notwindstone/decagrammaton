@@ -1,0 +1,26 @@
+<script lang="ts">
+  const { filter, stats } = $props();
+</script>
+
+<template>
+  <div class="flex gap-2 mb-6">
+    <button
+      class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'all' ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      @click={() => filter.value = 'all'}
+    >
+      All ({ stats.value.total })
+    </button>
+    <button
+      class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'active' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      @click={() => filter.value = 'active'}
+    >
+      Active ({ stats.value.remaining })
+    </button>
+    <button
+      class={`px-4 py-2 rounded-lg font-medium transition ${filter.value === 'done' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      @click={() => filter.value = 'done'}
+    >
+      Done ({ stats.value.done })
+    </button>
+  </div>
+</template>

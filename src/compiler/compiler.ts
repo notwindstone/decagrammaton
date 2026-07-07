@@ -52,14 +52,18 @@ export class Compiler {
     const globalNames: Array<string> = [...this.globals.keys()];
     const globalValues: Array<unknown> = [...this.globals.values()];
     const scriptContent: string = this.parsed.script?.content ?? "";
-    const compiledScript = compileScript(scriptContent, globalNames);
+    const compiledScript = compileScript(scriptContent, [...globalNames, "$props"]);
 
     return {
       template: this.parsed.template,
-      factory: () => ({
-        ...Object.fromEntries(this.globals),
-        ...compiledScript(...globalValues),
-      }),
+      factory: (props?: Record<string, unknown>) => {
+        const $props = () => props ?? {};
+
+        return {
+          ...Object.fromEntries(this.globals),
+          ...compiledScript(...globalValues, $props),
+        };
+      },
     };
   }
 }
