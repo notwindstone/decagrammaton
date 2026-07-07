@@ -14,5 +14,9 @@
   "type": "module",
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ark-of-atrahasis": "^0.2.1",
+    "decagrammaton": "^0.4.0"
   }
 }

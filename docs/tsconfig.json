@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "types": ["decagrammaton/deca"],
+
     // Enable latest features
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",

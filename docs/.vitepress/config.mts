@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { malkuth } from "decagrammaton/vite";
 
 export default defineConfig({
   title: "Decagrammaton",
@@ -6,6 +7,9 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', href: '/favicon.png' }]
   ],
+  vite: {
+    plugins: [malkuth()],
+  },
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },

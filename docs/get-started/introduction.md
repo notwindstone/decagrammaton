@@ -38,10 +38,15 @@ Decagrammaton uses files with an extension `.deca`. A `.deca` file may have thre
 
 <style>
   .example-button {
-    background-color: #0d7a9e;
+    background-color: #444444;
     color: #ffffff;
 
     border-radius: 6px;
+    padding: 4px 8px;
+
+    &:active {
+      background-color: #333333;
+    }
   }
 </style>
 
@@ -51,6 +56,10 @@ Decagrammaton uses files with an extension `.deca`. A `.deca` file may have thre
   </button>
 </template>
 ```
+
+Output:
+
+<Counter />
 
 Some notes:
 
