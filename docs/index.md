@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: "Decagrammaton"
-  text: "A UI framework designed to run in Secure ECMAScript compartments"
+  text: "A UI framework that can run in Secure ECMAScript compartments"
   tagline: <3
   actions:
     - theme: brand
