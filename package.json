@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
-    "ark-of-atrahasis": "^0.2.0",
+    "ark-of-atrahasis": "^0.2.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
   },
