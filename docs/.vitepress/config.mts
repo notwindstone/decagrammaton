@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  title: "Decagrammaton.js",
+  title: "Decagrammaton",
   description: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config

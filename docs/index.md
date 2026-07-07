@@ -3,23 +3,24 @@
 layout: home
 
 hero:
-  name: "Decagrammaton.js"
-  text: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments"
-  tagline: My great project tagline
+  name: "Decagrammaton"
+  text: "A UI framework designed to run in Secure ECMAScript compartments"
+  tagline: <3
   actions:
     - theme: brand
-      text: Markdown Examples
+      text: Get Started
       link: /markdown-examples
     - theme: alt
-      text: API Examples
+      text: Demo
       link: /api-examples
 
 features:
-  - title: Feature A
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature B
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature C
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
+  - title: Single-File Components
+    details: Decagrammaton is heavily inspired by the syntax of Svelte 5 and Vue 3
+  - title: Declarative
+    details: Describe your UI in templates based on app states
+  - title: Reactive
+    link: /asdf
+    details: The reactivity system is based on the lightest signal library (alien-signals)
 ---
 

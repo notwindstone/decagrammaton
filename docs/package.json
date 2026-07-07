@@ -5,6 +5,14 @@
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
+    "@types/bun": "latest",
+    "vitepress": "^1.6.4",
     "vue": "^3.5.39"
+  },
+  "name": "docs",
+  "module": "index.ts",
+  "type": "module",
+  "peerDependencies": {
+    "typescript": "^5.0.0"
   }
 }
