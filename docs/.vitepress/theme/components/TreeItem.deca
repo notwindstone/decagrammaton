@@ -28,23 +28,22 @@
 
 <template>
   <li>
-    <button
-      class={isFolder ? "bold" : ""}
+    <div
+      class={isFolder.value ? "bold" : ""}
       @click={toggle}
-      @dblclick={changeType}>
+      @dblclick={changeType}
+    >
       { model.value.name }
-      <span :if={isFolder}>[{ isOpen ? '-' : '+' }]</span>
-    </button>
-    <ul :if={isFolder && isOpen}>
+      <span :if={isFolder.value}>[{ isOpen.value ? '-' : '+' }]</span>
+    </div>
+    <ul :if={isFolder.value && isOpen.value}>
       <TreeItem
         class="item"
         :for={(child, index) in model.value.children}
         :key={index}
         model={child}>
       </TreeItem>
-      <li class="add">
-        <button @click={addChild}>+</button>
-      </li>
+      <li class="add" @click={addChild}>+</li>
     </ul>
   </li>
 </template>

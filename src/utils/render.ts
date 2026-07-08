@@ -19,6 +19,14 @@ import type { ComponentDefinitionType } from "../types/component/component-defin
 
 type CleanupFn = () => void;
 
+// A node to insert content before. `null` means append to the end of the parent.
+type Anchor = SafeElement | SafeTextNode | null;
+
+function place(parent: SafeElement, node: SafeElement | SafeTextNode, anchor: Anchor): void {
+  if (anchor) parent.insertBefore(node, anchor);
+  else parent.appendChild(node);
+}
+
 const FORMATTING_TAGS = new Set<string>([
   "strong", "em", "small", "b", "i", "u",
   "code", "kbd", "samp", "var",
@@ -70,11 +78,12 @@ export function mount(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  anchor: Anchor = null,
 ): CleanupFn {
   const cleanups: Array<CleanupFn> = [];
 
   for (const node of nodes) {
-    const cleanup = mountNode(node, container, scope, gui, components, context);
+    const cleanup = mountNode(node, container, scope, gui, components, context, anchor);
     if (cleanup) cleanups.push(cleanup);
   }
 
@@ -90,18 +99,19 @@ function mountNode(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  anchor: Anchor = null,
 ): CleanupFn | null {
   switch (node.type) {
     case "element":
-      return mountElement(node, parent, scope, gui, components, context);
+      return mountElement(node, parent, scope, gui, components, context, anchor);
     case "text":
-      return mountText(node, parent, gui);
+      return mountText(node, parent, gui, anchor);
     case "expression":
-      return mountExpression(node, parent, scope, gui);
+      return mountExpression(node, parent, scope, gui, anchor);
     case "conditional":
-      return mountConditional(node, parent, scope, gui, components, context);
+      return mountConditional(node, parent, scope, gui, components, context, anchor);
     case "for":
-      return mountFor(node, parent, scope, gui, components, context);
+      return mountFor(node, parent, scope, gui, components, context, anchor);
   }
 }
 
@@ -152,14 +162,15 @@ function mountElement(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  anchor: Anchor = null,
 ): CleanupFn | null {
   if (isComponentTag(node.tag)) {
-    return mountComponent(node, parent, scope, gui, components, context);
+    return mountComponent(node, parent, scope, gui, components, context, anchor);
   }
 
   // List items are created via the parent list (createItem/createTerm/
   // createDescription) which already appends them; everything else is created
-  // standalone and appended below.
+  // standalone and placed below.
   const listItem = createListItem(node.tag, parent);
   const element = listItem ?? createElement(node.tag, gui);
   const cleanups: Array<CleanupFn> = [];
@@ -172,7 +183,7 @@ function mountElement(
     if (cleanup) cleanups.push(cleanup);
   }
 
-  if (!listItem) parent.appendChild(element);
+  if (!listItem) place(parent, element, anchor);
 
   return () => {
     for (const cleanup of cleanups) cleanup();
@@ -184,10 +195,11 @@ function mountText(
   node: { value: string },
   parent: SafeElement,
   gui: SafeDocument,
+  anchor: Anchor = null,
 ): CleanupFn | null {
   const textNode = gui.createRawText();
   textNode.setText(node.value);
-  parent.appendChild(textNode);
+  place(parent, textNode, anchor);
 
   return () => textNode.remove();
 }
@@ -199,6 +211,7 @@ function mountComponent(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  anchor: Anchor = null,
 ): CleanupFn | null {
   const definition = (scope[node.tag] ?? components?.[node.tag]) as ComponentDefinitionType | undefined;
 
@@ -228,7 +241,7 @@ function mountComponent(
     styleSheet.setCSS(definition.styles);
   }
 
-  const templateCleanup = mount(definition.template, parent, componentScope, gui, components, childContext);
+  const templateCleanup = mount(definition.template, parent, componentScope, gui, components, childContext, anchor);
 
   return () => {
     templateCleanup();
@@ -241,9 +254,10 @@ function mountExpression(
   parent: SafeElement,
   scope: Record<string, unknown>,
   gui: SafeDocument,
+  anchor: Anchor = null,
 ): CleanupFn {
   const textNode = gui.createRawText();
-  parent.appendChild(textNode);
+  place(parent, textNode, anchor);
 
   const dispose = effect(() => {
     textNode.setText(String(evaluateExpression(node.value, scope) ?? ""));
@@ -262,21 +276,17 @@ function mountConditional(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  outerAnchor: Anchor = null,
 ): CleanupFn {
   const anchor = gui.createRawText();
-  parent.appendChild(anchor);
+  place(parent, anchor, outerAnchor);
 
   let currentCleanup: CleanupFn | null = null;
-  let currentElements: Array<SafeElement | SafeTextNode> = [];
 
   const dispose = effect(() => {
     if (currentCleanup) {
       currentCleanup();
-      for (const el of currentElements) {
-        if ('remove' in el) el.remove();
-      }
       currentCleanup = null;
-      currentElements = [];
     }
 
     let matchedBranch: typeof node.branches[number] | null = null;
@@ -295,40 +305,23 @@ function mountConditional(
 
     if (!matchedBranch) return;
 
-    const wrapper = gui.createDiv();
-    currentElements.push(wrapper);
-    parent.insertBefore(wrapper, anchor);
-
+    // Mount branch content directly before the anchor — no wrapper element, so
+    // the rendered structure matches the template exactly. Each child's cleanup
+    // removes its own node.
     const cleanups: Array<CleanupFn> = [];
     for (const child of matchedBranch.children) {
-      const cleanup = mountNode(child, wrapper, scope, gui, components, context);
+      const cleanup = mountNode(child, parent, scope, gui, components, context, anchor);
       if (cleanup) cleanups.push(cleanup);
     }
 
     currentCleanup = () => {
       for (const c of cleanups) c();
     };
-
-    return () => {
-      if (currentCleanup) {
-        currentCleanup();
-        for (const el of currentElements) {
-          if ('remove' in el) el.remove();
-        }
-        currentCleanup = null;
-        currentElements = [];
-      }
-    };
   });
 
   return () => {
     dispose();
-    if (currentCleanup) {
-      currentCleanup();
-      for (const el of currentElements) {
-        if ('remove' in el) el.remove();
-      }
-    }
+    if (currentCleanup) currentCleanup();
     anchor.remove();
   };
 }
@@ -340,11 +333,12 @@ function mountFor(
   gui: SafeDocument,
   components?: Record<string, ComponentDefinitionType>,
   context?: Record<string, unknown>,
+  outerAnchor: Anchor = null,
 ): CleanupFn {
   const anchor = gui.createRawText();
-  parent.appendChild(anchor);
+  place(parent, anchor, outerAnchor);
 
-  const keyMap = new Map<unknown, { wrapper: SafeElement; cleanup: CleanupFn }>();
+  const keyMap = new Map<unknown, { cleanup: CleanupFn }>();
 
   const dispose = effect(() => {
     const items = evaluateExpression(node.iterable, scope) as Array<unknown> | undefined;
@@ -369,17 +363,15 @@ function mountFor(
       newKeys.add(key);
 
       if (!keyMap.has(key)) {
-        const wrapper = gui.createDiv();
+        // Mount item content directly before the anchor — no wrapper element.
         const cleanups: Array<CleanupFn> = [];
 
         for (const child of node.children) {
-          const cleanup = mountNode(child, wrapper, itemScope, gui, components, context);
+          const cleanup = mountNode(child, parent, itemScope, gui, components, context, anchor);
           if (cleanup) cleanups.push(cleanup);
         }
 
-        parent.insertBefore(wrapper, anchor);
         keyMap.set(key, {
-          wrapper,
           cleanup: () => { for (const c of cleanups) c(); },
         });
       }
@@ -388,25 +380,15 @@ function mountFor(
     for (const [key, entry] of keyMap) {
       if (!newKeys.has(key)) {
         entry.cleanup();
-        entry.wrapper.remove();
         keyMap.delete(key);
       }
     }
-
-    return () => {
-      for (const [, entry] of keyMap) {
-        entry.cleanup();
-        entry.wrapper.remove();
-      }
-      keyMap.clear();
-    };
   });
 
   return () => {
     dispose();
     for (const [, entry] of keyMap) {
       entry.cleanup();
-      entry.wrapper.remove();
     }
     keyMap.clear();
     anchor.remove();
