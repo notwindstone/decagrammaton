@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { createSafeDocument } from "ark-of-atrahasis";
-import { createApp } from "decagrammaton";
+import { createApp, type DecaModule } from "decagrammaton";
 import { onMounted, onUnmounted, shallowRef } from "vue";
 
 const { suffix, component } = defineProps<{
   "suffix"   : string;
-  "component": unknown;
+  "component": DecaModule;
 }>();
 
 const cleanup = shallowRef<() => void>((): void => {});
@@ -14,7 +14,6 @@ onMounted(() => {
   const safeDocument = createSafeDocument(
     document.getElementById(`__mounting-point-${suffix}`)!,
   );
-  // @ts-ignore DecaModule seems to be missing from the 'decagrammaton' package...
   const app = createApp(component);
 
   cleanup.value = app.mount(

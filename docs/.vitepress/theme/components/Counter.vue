@@ -5,4 +5,4 @@ import RenderDeca from "./RenderDeca.vue";
 
 <template>
   <RenderDeca suffix="counter" :component="Counter" />
-</template>
+</template>/

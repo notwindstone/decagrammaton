@@ -33,11 +33,12 @@
       "import": "./dist/compiler/compiler.js"
     },
     "./deca": {
-      "types": "./dist/deca.d.ts"
+      "types": "./types/deca.d.ts"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "types"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
