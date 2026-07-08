@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import Counter from "./Counter.deca";
+import TreeView from "./TreeView.deca";
 import RenderDeca from "./RenderDeca.vue";
 </script>
 
 <template>
-  <RenderDeca suffix="counter" :component="Counter" />
+  <RenderDeca suffix="tree-view" :component="TreeView" />
 </template>

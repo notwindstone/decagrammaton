@@ -194,3 +194,21 @@ Share data across the component tree without prop drilling:
   </div>
 </template>
 ```
+
+## Complex: Tree View
+
+This code was converted to Decagrammaton manually from https://vuejs.org/examples/#tree
+
+`TreeView.deca`:
+
+```html
+
+```
+
+`TreeItem.deca`:
+
+```html
+
+```
+
+<TreeView />

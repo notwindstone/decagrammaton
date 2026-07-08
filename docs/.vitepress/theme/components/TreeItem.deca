@@ -1,0 +1,50 @@
+<script lang="ts">
+  import { $signal } from "decagrammaton";
+  import { $computed } from "decagrammaton";
+
+  const { model } = defineProps();
+
+  const isOpen = $signal(false)
+  const isFolder = $computed(() => {
+    return model.value.children && model.value.children.length
+  })
+
+  function toggle() {
+    isOpen.value = !isOpen.value
+  }
+
+  function changeType() {
+    if (!isFolder.value) {
+      model.value.children = []
+      addChild()
+      isOpen.value = true
+    }
+  }
+
+  function addChild() {
+    model.value.children.push({ name: 'new stuff' })
+  }
+</script>
+
+<template>
+  <li>
+    <button
+      class={isFolder ? "bold" : ""}
+      @click={toggle}
+      @dblclick={changeType}>
+      { model.value.name }
+      <span :if={isFolder}>[{ isOpen ? '-' : '+' }]</span>
+    </button>
+    <ul :if={isFolder && isOpen}>
+      <TreeItem
+        class="item"
+        :for={(child, index) in model.value.children}
+        :key={index}
+        model={child}>
+      </TreeItem>
+      <li class="add">
+        <button @click={addChild}>+</button>
+      </li>
+    </ul>
+  </li>
+</template>
