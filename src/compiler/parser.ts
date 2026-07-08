@@ -106,6 +106,7 @@ export class Parser {
     }
 
     parse(): ParsedComponentType {
+        this.skipWhitespaceText();
         const script = this.parseScript();
         const requires = script ? extractRequires(this.tokens) : new Set<string>();
         this.skipWhitespaceText();

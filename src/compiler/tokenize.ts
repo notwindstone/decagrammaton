@@ -148,7 +148,15 @@ export function tokenize(source: string, filename?: string): Token[] {
                 if (ch() === '<') {
                     flushBuffer(TokenType.Text);
 
-                    if (lookaheadMatch('</')) {
+                    if (lookaheadMatch('<!--')) {
+                        advanceN(4); // <!--
+                        while (pos < source.length && !lookaheadMatch('-->')) {
+                            advance();
+                        }
+                        if (pos >= source.length) error('Unclosed comment');
+                        advanceN(3); // -->
+                        startBuffer();
+                    } else if (lookaheadMatch('</')) {
                         const afterSlash = source.slice(pos + 2, pos + 10).toLowerCase();
                         if (afterSlash.startsWith('script') || afterSlash.startsWith('style')) {
                             break;
