@@ -2,10 +2,10 @@
   import { $signal } from "decagrammaton";
   import { $computed } from "decagrammaton";
 
-  const { model } = defineProps();
+  const { model }: {} = defineProps();
 
   const isOpen = $signal(false)
-  const isFolder = $computed(() => {
+  const isFolder = $computed((): void => {
     return model.children && model.children.length
   })
 

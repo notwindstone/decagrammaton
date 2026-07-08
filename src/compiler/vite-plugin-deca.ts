@@ -1,6 +1,6 @@
 import type { Plugin } from "vite";
 import { Parser } from "./parser.ts";
-import { extractImports, extractTopLevelNames } from "./script.ts";
+import { extractImports, extractTopLevelNames, transpileScript } from "./script.ts";
 
 export function malkuth(): Plugin {
   return {
@@ -10,11 +10,14 @@ export function malkuth(): Plugin {
 
       const filename = id.split("/").pop() ?? id;
       const parsed = new Parser(filename).put(source).parse();
-      const scriptContent = parsed.script?.content ?? "";
+      const rawScript = parsed.script?.content ?? "";
+      const scriptContent = parsed.script?.lang === "ts"
+        ? transpileScript(rawScript)
+        : rawScript;
       const templateJson = JSON.stringify(parsed.template);
       const styleContent = parsed.style?.content ?? "";
       const requiresArray = [...parsed.requires];
-      const { imports, importedNames, cleanedScript } = extractImports(scriptContent);
+      const { imports, importedNames, cleanedScript } = extractImports(scriptContent, filename);
 
       const decaComponentNames = new Set<string>();
       const processedImports = imports.map(imp => {
@@ -45,7 +48,7 @@ export function malkuth(): Plugin {
         ? `const __imports = { ${importEntries.join(", ")} };`
         : "const __imports = {};";
 
-      const topLevelNames = extractTopLevelNames(cleanedScript);
+      const topLevelNames = extractTopLevelNames(cleanedScript, filename);
       const topLevelNamesJson = JSON.stringify(topLevelNames);
 
       return {

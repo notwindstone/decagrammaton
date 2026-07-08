@@ -1,5 +1,7 @@
 import * as acorn from "acorn";
+import * as ts from "typescript";
 import type { ImportDeclaration, Pattern, VariableDeclaration, FunctionDeclaration } from "acorn";
+import { DecaParseError } from "./errors.ts";
 
 export interface ExtractedImports {
   imports: Array<string>;
@@ -7,14 +9,44 @@ export interface ExtractedImports {
   cleanedScript: string;
 }
 
-export function extractImports(script: string): ExtractedImports {
-  let ast: acorn.Program;
-
+/**
+ * Parse a script body with acorn, converting acorn's SyntaxError into a
+ * DecaParseError. Line/column are relative to the `<script>` body, not the
+ * whole `.deca` file. Callers pass the script through {@link transpileScript}
+ * first, so anything reaching here is expected to be valid JS.
+ */
+function parseModule(script: string, filename?: string): acorn.Program {
   try {
-    ast = acorn.parse(script, { ecmaVersion: "latest", sourceType: "module" });
-  } catch {
-    return { imports: [], importedNames: [], cleanedScript: script };
+    return acorn.parse(script, {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      allowReturnOutsideFunction: true,
+    });
+  } catch (err) {
+    const loc = (err as { loc?: { line: number; column: number } }).loc;
+    const message = (err as Error).message?.replace(/\s*\(\d+:\d+\)\s*$/, "") ?? "Failed to parse script";
+    throw new DecaParseError(message, filename, loc?.line, loc?.column);
   }
+}
+
+/**
+ * Transpile a TypeScript `<script lang="ts">` body down to plain JS so acorn
+ * (a JS-only parser) can handle it. `verbatimModuleSyntax` is required: the
+ * script's imports are referenced from the template, not the script body, so
+ * TypeScript would otherwise elide them as "unused" and break component wiring.
+ */
+export function transpileScript(script: string): string {
+  return ts.transpileModule(script, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      verbatimModuleSyntax: true,
+    },
+  }).outputText;
+}
+
+export function extractImports(script: string, filename?: string): ExtractedImports {
+  const ast = parseModule(script, filename);
 
   const imports: Array<string> = [];
   const importedNames: Array<string> = [];
@@ -74,14 +106,8 @@ function collectBindingNames(pattern: Pattern, names: Array<string>): void {
   }
 }
 
-export function extractTopLevelNames(script: string): Array<string> {
-  let ast: acorn.Program;
-
-  try {
-    ast = acorn.parse(script, { ecmaVersion: "latest", sourceType: "module", allowReturnOutsideFunction: true });
-  } catch {
-    return [];
-  }
+export function extractTopLevelNames(script: string, filename?: string): Array<string> {
+  const ast = parseModule(script, filename);
 
   const names: Array<string> = [];
 
@@ -104,8 +130,9 @@ export function extractTopLevelNames(script: string): Array<string> {
 export function compileScript(
   script: string,
   globals: Array<string>,
+  filename?: string,
 ): (...args: Array<unknown>) => Record<string, unknown> {
-  const names = extractTopLevelNames(script);
+  const names = extractTopLevelNames(script, filename);
   const body = `${script}\nreturn { ${names.join(", ")} };`;
 
   return new Function(...globals, body) as (...args: Array<unknown>) => Record<string, unknown>;

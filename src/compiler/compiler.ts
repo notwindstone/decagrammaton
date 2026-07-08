@@ -1,7 +1,7 @@
 import type { SafeElement, SafeDocument } from "ark-of-atrahasis";
 
 import { Parser } from "./parser.ts";
-import { compileScript } from "./script.ts";
+import { compileScript, transpileScript } from "./script.ts";
 import { mount } from "../utils/render.ts";
 import type { ParsedComponentType, TemplateNode } from "./parser.ts";
 import type { ComponentDefinitionType, ProvideFn, InjectFn } from "../types/component/component-definition.type.ts";
@@ -28,10 +28,12 @@ export class Compiler {
 
     const globalNames: Array<string> = [...this.globals.keys()];
     const globalValues: Array<unknown> = [...this.globals.values()];
-    const scriptContent: string = this.parsed.script?.content ?? "";
+    const scriptContent: string = this.parsed.script?.lang === "ts"
+      ? transpileScript(this.parsed.script.content)
+      : (this.parsed.script?.content ?? "");
     const provide = provideFn ?? (() => {});
     const inject = injectFn ?? (() => undefined);
-    const compiledScript = compileScript(scriptContent, [...globalNames, "provide", "inject"]);
+    const compiledScript = compileScript(scriptContent, [...globalNames, "provide", "inject"], this.filename);
     const scope: Record<string, unknown> = {
       ...Object.fromEntries(this.globals),
       ...compiledScript(...globalValues, provide, inject),
@@ -53,8 +55,10 @@ export class Compiler {
 
     const globalNames: Array<string> = [...this.globals.keys()];
     const globalValues: Array<unknown> = [...this.globals.values()];
-    const scriptContent: string = this.parsed.script?.content ?? "";
-    const compiledScript = compileScript(scriptContent, [...globalNames, "defineProps", "provide", "inject"]);
+    const scriptContent: string = this.parsed.script?.lang === "ts"
+      ? transpileScript(this.parsed.script.content)
+      : (this.parsed.script?.content ?? "");
+    const compiledScript = compileScript(scriptContent, [...globalNames, "defineProps", "provide", "inject"], this.filename);
 
     return {
       template: this.parsed.template,

@@ -7,8 +7,15 @@ export interface SourceLocation {
     end: { line: number; column: number };
 }
 
+/** Extract the `lang` attribute value from a raw `<script ...>` open tag, e.g. `ts`. */
+function parseLangAttr(openTag: string): string | null {
+    const match = openTag.match(/\blang\s*=\s*["']([^"']*)["']/);
+    return match ? match[1]!.trim().toLowerCase() : null;
+}
+
 export interface ScriptBlock {
     content: string;
+    lang: string | null;
     loc: SourceLocation;
 }
 
@@ -138,6 +145,7 @@ export class Parser {
 
         return {
             content: contentToken?.value ?? '',
+            lang: parseLangAttr(startToken.value),
             loc: this.loc(startToken, endToken),
         };
     }

@@ -1,14 +1,25 @@
 import { defineConfig } from 'vitepress'
-import { malkuth } from "decagrammaton/vite";
+import { fileURLToPath } from 'node:url'
+// Import 'decagrammaton/vite' locally to test it
+import { malkuth } from "../../src/vite.ts";
 
 export default defineConfig({
   title: "Decagrammaton",
   description: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
   head: [
-    ['link', { rel: 'icon', href: '/favicon.png' }]
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
   ],
   vite: {
     plugins: [malkuth()],
+    resolve: {
+      alias: [
+        {
+          find: /^decagrammaton$/,
+          // Import 'decagrammaton' locally to test it
+          replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
+        },
+      ],
+    },
   },
   themeConfig: {
     nav: [

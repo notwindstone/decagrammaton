@@ -1,3 +1,4 @@
+<!-- this comment lives outside any element -->
 <script lang="ts">
   import { $signal } from "decagrammaton";
 
@@ -21,9 +22,12 @@
     }
   }
 </style>
+<!-- this comment lives outside any element -->
 
 <template>
+  <!-- this comment lives outside any element -->
   <button class="example-button" @click={increment}>
+    <!-- and this one is nested inside, with a fake <tag> and {brace} -->
     Clicked { count.value } times
   </button>
 </template>

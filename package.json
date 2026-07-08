@@ -57,11 +57,11 @@
   "devDependencies": {
     "@types/node": "^26.1.0",
     "ark-of-atrahasis": "^0.2.1",
-    "typescript": "~6.0.2",
     "vite": "^8.1.1"
   },
   "dependencies": {
     "acorn": "^8.17.0",
-    "alien-signals": "^3.2.1"
+    "alien-signals": "^3.2.1",
+    "typescript": "~6.0.2"
   }
 }
