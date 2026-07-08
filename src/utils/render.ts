@@ -118,10 +118,9 @@ function createElement(tag: string, gui: SafeDocument): SafeElement {
     return gui.createFormatting(tag as FormattingTag);
   }
 
-  if (tag === "ul") return gui.createList("unordered") as SafeElement;
-  if (tag === "ol") return gui.createList("ordered") as SafeElement;
-  if (tag === "dl") return gui.createList("description") as SafeElement;
-  if (tag === "li" || tag === "dt" || tag === "dd") return gui.createDiv();
+  if (tag === "ul") return gui.createList("unordered");
+  if (tag === "ol") return gui.createList("ordered");
+  if (tag === "dl") return gui.createList("description");
 
   const creator = TAG_CREATORS[tag];
   if (creator) {
@@ -129,6 +128,21 @@ function createElement(tag: string, gui: SafeDocument): SafeElement {
   }
 
   return gui.createDiv();
+}
+
+// `li`/`dt`/`dd` cannot be created standalone: the Ark list API exposes
+// `createItem`/`createTerm`/`createDescription` on the parent list element,
+// and each auto-appends the new item to that list. Returns null when the tag
+// isn't a list item or the parent isn't a matching list (e.g. malformed markup),
+// so the caller can fall back to a generic element.
+function createListItem(tag: string, parent: SafeElement): SafeElement | null {
+  const el = parent as unknown as Record<string, (() => SafeElement) | undefined>;
+
+  if (tag === "li" && typeof el["createItem"] === "function") return el["createItem"]!();
+  if (tag === "dt" && typeof el["createTerm"] === "function") return el["createTerm"]!();
+  if (tag === "dd" && typeof el["createDescription"] === "function") return el["createDescription"]!();
+
+  return null;
 }
 
 function mountElement(
@@ -143,7 +157,11 @@ function mountElement(
     return mountComponent(node, parent, scope, gui, components, context);
   }
 
-  const element = createElement(node.tag, gui);
+  // List items are created via the parent list (createItem/createTerm/
+  // createDescription) which already appends them; everything else is created
+  // standalone and appended below.
+  const listItem = createListItem(node.tag, parent);
+  const element = listItem ?? createElement(node.tag, gui);
   const cleanups: Array<CleanupFn> = [];
 
   const attrCleanups = applyAttributes(element, node.attributes, scope, gui);
@@ -154,7 +172,7 @@ function mountElement(
     if (cleanup) cleanups.push(cleanup);
   }
 
-  parent.appendChild(element);
+  if (!listItem) parent.appendChild(element);
 
   return () => {
     for (const cleanup of cleanups) cleanup();
