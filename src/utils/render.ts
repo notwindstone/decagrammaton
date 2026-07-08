@@ -241,7 +241,12 @@ function mountComponent(
     styleSheet.setCSS(definition.styles);
   }
 
-  const templateCleanup = mount(definition.template, parent, componentScope, gui, components, childContext, anchor);
+  // Make the component available to its own template under the tag it was
+  // invoked as, so a component can recurse (e.g. a tree node rendering child
+  // tree nodes) without having to import itself.
+  const childComponents = { ...components, [node.tag]: definition };
+
+  const templateCleanup = mount(definition.template, parent, componentScope, gui, childComponents, childContext, anchor);
 
   return () => {
     templateCleanup();

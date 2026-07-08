@@ -29,7 +29,7 @@
 
 <template>
   <ul>
-    <TreeItem class="item" model={treeData}></TreeItem>
+    <TreeItem class="item" model={treeData.value}></TreeItem>
   </ul>
 </template>
 
