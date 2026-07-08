@@ -14,7 +14,7 @@ hero:
       link: /get-started/introduction
     - theme: alt
       text: Examples
-      link: /get-started/examples
+      link: /examples/simple
 
 features:
   - title: Single-File Components
