@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "type": "module",
   "description": "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
   "license": "GPL-3.0-only",

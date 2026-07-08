@@ -17,6 +17,6 @@
   },
   "dependencies": {
     "ark-of-atrahasis": "^0.2.1",
-    "decagrammaton": "0.4.3"
+    "decagrammaton": "^0.4.4"
   }
 }

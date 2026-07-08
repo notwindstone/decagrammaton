@@ -7,7 +7,7 @@ import type {
   HeadingLevel,
   FormattingTag, SafeStyleSheet,
 } from "ark-of-atrahasis";
-import { effect } from "alien-signals";
+import { effect, setActiveSub } from "alien-signals";
 import type {
   TemplateNode,
   ElementNode,
@@ -25,6 +25,21 @@ type Anchor = SafeElement | SafeTextNode | null;
 function place(parent: SafeElement, node: SafeElement | SafeTextNode, anchor: Anchor): void {
   if (anchor) parent.insertBefore(node, anchor);
   else parent.appendChild(node);
+}
+
+// Runs `fn` with the reactive system's active subscriber detached, so any
+// effects created inside become independent roots rather than children of the
+// currently-running effect. We manage every effect's lifecycle manually (each
+// mount returns its own cleanup); without this, alien-signals would adopt child
+// effects and dispose them whenever the parent effect re-runs — silently killing
+// the reactivity of already-mounted `:if`/`:for`/expression content on updates.
+function detached<T>(fn: () => T): T {
+  const previous = setActiveSub(undefined);
+  try {
+    return fn();
+  } finally {
+    setActiveSub(previous);
+  }
 }
 
 const FORMATTING_TAGS = new Set<string>([
@@ -314,10 +329,12 @@ function mountConditional(
     // the rendered structure matches the template exactly. Each child's cleanup
     // removes its own node.
     const cleanups: Array<CleanupFn> = [];
-    for (const child of matchedBranch.children) {
-      const cleanup = mountNode(child, parent, scope, gui, components, context, anchor);
-      if (cleanup) cleanups.push(cleanup);
-    }
+    detached(() => {
+      for (const child of matchedBranch!.children) {
+        const cleanup = mountNode(child, parent, scope, gui, components, context, anchor);
+        if (cleanup) cleanups.push(cleanup);
+      }
+    });
 
     currentCleanup = () => {
       for (const c of cleanups) c();
@@ -371,10 +388,12 @@ function mountFor(
         // Mount item content directly before the anchor — no wrapper element.
         const cleanups: Array<CleanupFn> = [];
 
-        for (const child of node.children) {
-          const cleanup = mountNode(child, parent, itemScope, gui, components, context, anchor);
-          if (cleanup) cleanups.push(cleanup);
-        }
+        detached(() => {
+          for (const child of node.children) {
+            const cleanup = mountNode(child, parent, itemScope, gui, components, context, anchor);
+            if (cleanup) cleanups.push(cleanup);
+          }
+        });
 
         keyMap.set(key, {
           cleanup: () => { for (const c of cleanups) c(); },
