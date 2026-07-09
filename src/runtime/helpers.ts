@@ -10,11 +10,16 @@ type SafeNode = SafeElement | SafeTextNode;
 // A reactive binding that must apply to the DOM synchronously. sigrea's
 // watchEffect defaults to "pre" (async) flush; template bindings need "sync" so
 // text/attr updates land immediately, matching the old alien-signals `effect`.
-// If a component Scope is active, the handle auto-disposes with it.
+//
+// Cleanup is NOT registered here: watchEffect -> watch -> watchImmediate already
+// calls `onDispose(() => watcher.stop(), scope)` when a scope is active (sigrea
+// dist index.mjs:2382). renderEffect is always called inside the component's
+// runWithScope (from render()), so the handle auto-disposes with that scope. An
+// extra onDispose(() => handle.stop()) would be redundant when scoped and, with
+// no active scope, onDispose runs its cleanup immediately — stopping the effect
+// the instant it's created. So we rely on sigrea's own scope binding.
 export function renderEffect(fn: () => void): WatchHandle {
-  const handle = watchEffect(fn, { flush: "sync" });
-  onDispose(() => handle.stop());
-  return handle;
+  return watchEffect(fn, { flush: "sync" });
 }
 
 // Attach an event handler via the whitelisted Ark `on*` method. Unknown events

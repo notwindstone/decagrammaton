@@ -1,4 +1,5 @@
 import { compileScript, rewriteDefault, type SFCDescriptor } from "@vue/compiler-sfc";
+import type { BindingMetadata } from "@vue/compiler-core";
 
 // Lower `<script setup>` into a plain `setup()` factory.
 //
@@ -13,7 +14,7 @@ export interface CompiledScript {
   content: string;
   // The const name the component object is bound to.
   bindingName: string;
-  bindings: Record<string, string>;
+  bindings: BindingMetadata;
 }
 
 export function compileSetup(descriptor: SFCDescriptor, id: string): CompiledScript {
@@ -31,5 +32,5 @@ export function compileSetup(descriptor: SFCDescriptor, id: string): CompiledScr
   const script = compileScript(descriptor, { id });
   const content = rewriteDefault(script.content, bindingName);
 
-  return { content, bindingName, bindings: script.bindings };
+  return { content, bindingName, bindings: script.bindings ?? {} };
 }

@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "ark-of-atrahasis": "^0.2.1",
+    "ark-of-atrahasis": "^0.3.0",
     "decagrammaton": "^0.4.0"
   },
   "devDependencies": {
