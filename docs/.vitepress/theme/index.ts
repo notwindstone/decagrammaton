@@ -6,6 +6,8 @@ import './style.css'
 import Counter from "./components/Counter.vue";
 import RenderDeca from "./components/RenderDeca.vue";
 import TreeView from "./components/TreeView.vue";
+import FlightBooker from "./components/7guis/FlightBooker.vue";
+import TemperatureConverter from "./components/7guis/TemperatureConverter.vue";
 
 export default {
   extends: DefaultTheme,
@@ -18,5 +20,7 @@ export default {
     app.component("RenderDeca", RenderDeca);
     app.component("Counter", Counter);
     app.component("TreeView", TreeView);
+    app.component("FlightBooker", FlightBooker);
+    app.component("TemperatureConverter", TemperatureConverter);
   }
 } satisfies Theme

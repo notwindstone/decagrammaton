@@ -1,0 +1,70 @@
+<script lang="ts">
+  import { $signal, $computed } from "decagrammaton";
+
+  const tripType = $signal("one-way");
+  const startDate = $signal("");
+  const returnDate = $signal("");
+  const message = $signal("");
+
+  // Get today's date in YYYY-MM-DD format for comparison
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const isRoundTrip = $computed(() => tripType.value === "round-trip");
+
+  const isStartDateValid = $computed(() => {
+    return startDate.value !== "" && startDate.value >= todayString;
+  });
+
+  const isReturnDateValid = $computed(() => {
+    if (!isRoundTrip.value) return true; // Not required for one-way
+    return returnDate.value !== "" && returnDate.value >= startDate.value;
+  });
+
+  const canBook = $computed(() => isStartDateValid.value && isReturnDateValid.value);
+
+  function handleTripTypeChange(event) {
+    tripType.value = event.target.value;
+  }
+
+  function handleStartDateChange(event) {
+    startDate.value = event.target.value;
+  }
+
+  function handleReturnDateChange(event) {
+    returnDate.value = event.target.value;
+  }
+
+  function book() {
+    let msg = `Booked ${tripType.value} flight on ${startDate.value}`;
+    if (isRoundTrip.value) {
+      msg += ` returning on ${returnDate.value}`;
+    }
+    message.value = msg;
+  }
+</script>
+
+<template>
+  <div>
+    <select value={tripType.value} @change={handleTripTypeChange}>
+      <option value="one-way">one-way</option>
+      <option value="round-trip">round-trip</option>
+    </select>
+
+    <input type="date" value={startDate.value} @change={handleStartDateChange} />
+
+    <input
+      type="date"
+      value={returnDate.value}
+      @change={handleReturnDateChange}
+      disabled={!isRoundTrip.value}
+    />
+
+    <button @click={book} disabled={!canBook.value}>Book</button>
+
+    <!-- Reactively show confirmation message -->
+    <p :if={message.value !== ""} style="color: green; font-weight: bold;">
+      {message.value}
+    </p>
+  </div>
+</template>

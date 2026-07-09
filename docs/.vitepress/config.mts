@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+//import { malkuth } from "decagrammaton/vite";
 import { fileURLToPath } from 'node:url'
-// Import 'decagrammaton/vite' locally to test it
+// Imports 'decagrammaton/vite' locally to test it
 import { malkuth } from "../../src/vite.ts";
 
 export default defineConfig({
@@ -15,7 +16,7 @@ export default defineConfig({
       alias: [
         {
           find: /^decagrammaton$/,
-          // Import 'decagrammaton' locally to test it
+          // Imports 'decagrammaton' locally to test it
           replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
         },
       ],
