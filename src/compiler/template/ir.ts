@@ -10,7 +10,7 @@
 // (static), and Interpolation ({{ expr }}). v-if / v-for / :attr node kinds are
 // added by their own slices.
 
-export type IRNode = IRElement | IRText | IRInterpolation;
+export type IRNode = IRElement | IRText | IRInterpolation | IRIf;
 
 export interface IRElement {
   kind: "element";
@@ -31,4 +31,10 @@ export interface IRInterpolation {
   kind: "interpolation";
   // The template expression inside `{{ }}`, e.g. "count".
   expression: string;
+}
+
+export interface IRIf {
+  kind: "if";
+  // Branches for v-if / v-else-if* / v-else. `condition` is null for v-else.
+  branches: Array<{ condition: string | null; children: Array<IRNode> }>;
 }

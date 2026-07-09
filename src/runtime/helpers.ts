@@ -1,5 +1,14 @@
 import type { SafeElement, SafeTextNode, EventHandler, EventCleanup } from "ark-of-atrahasis";
-import { watchEffect, isSignal, onDispose, type WatchHandle } from "../reactivity.ts";
+import {
+  watchEffect,
+  isSignal,
+  onDispose,
+  getCurrentScope,
+  createScope,
+  runWithScope,
+  type WatchHandle,
+  type Scope,
+} from "../reactivity.ts";
 import { EVENT_METHODS } from "../compiler/tables.ts";
 
 // The runtime helpers that codegen output calls. Imported by generated render
@@ -45,6 +54,76 @@ export function setText(node: SafeTextNode, value: unknown): void {
 // Append a child node to a parent element.
 export function append(parent: SafeElement, child: SafeNode): void {
   parent.appendChild(child);
+}
+
+// A single v-if / v-else-if / v-else branch. `condition` is null for v-else.
+// `factory` builds and returns the branch's top-level nodes; it closes over the
+// generated render's `_ctx` and `gui` lexically.
+export type IfBranch = {
+  condition: (() => unknown) | null;
+  factory: () => Array<SafeNode>;
+};
+
+// A deferred root-level v-if. render() cannot mount it — the mount container is
+// only known to component.ts — so render returns this marker (carrying its
+// already-created anchor) and component.ts binds it via createIf(container, …).
+export interface RootIfMarker {
+  __deca_rootIf__: true;
+  anchor: SafeTextNode;
+  branches: Array<IfBranch>;
+}
+
+export function rootIf(anchor: SafeTextNode, branches: Array<IfBranch>): RootIfMarker {
+  return { __deca_rootIf__: true, anchor, branches };
+}
+
+export function isRootIf(node: unknown): node is RootIfMarker {
+  return typeof node === "object" && node !== null && (node as RootIfMarker).__deca_rootIf__ === true;
+}
+
+// Pick the active branch index: first v-if / v-else-if whose condition is
+// truthy, else the v-else (null condition), else -1 (nothing renders).
+function pickBranch(branches: Array<IfBranch>): number {
+  for (let i = 0; i < branches.length; i++) {
+    const condition = branches[i].condition;
+    if (condition === null) return i;
+    if (condition()) return i;
+  }
+  return -1;
+}
+
+// The one reactive-branch primitive. `parent` receives the branch nodes;
+// `anchor` is an already-mounted sibling that positions them via insertBefore.
+// Both are handed in explicitly — a node cannot locate its own parent (ark has
+// no parentNode), so createIf never reads ambient container state.
+//
+// Each active branch owns a child Scope parented to the component scope (via the
+// scope active at call time). On condition change we dispose the old branch's
+// scope (tearing down its interpolation effects + event cleanups) then mount the
+// new one. On component unmount, sigrea's createScope(parent) auto-registered
+// `parentScope.addCleanup(() => branchScope.dispose())`, so the live branch is
+// disposed by the component scope's own teardown — no manual onDispose needed.
+export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<IfBranch>): void {
+  const parentScope = getCurrentScope();
+  let active: { index: number; scope: Scope; nodes: Array<SafeNode> } | null = null;
+
+  renderEffect(() => {
+    const index = pickBranch(branches);
+    if (active && active.index === index) return;
+
+    if (active) {
+      for (const node of active.nodes) node.remove();
+      active.scope.dispose();
+      active = null;
+    }
+
+    if (index === -1) return;
+
+    const branchScope = createScope(parentScope);
+    const nodes = runWithScope(branchScope, () => branches[index].factory());
+    for (const node of nodes) parent.insertBefore(node, anchor);
+    active = { index, scope: branchScope, nodes };
+  });
 }
 
 // Wrap the setup() return in an auto-unwrapping context. Reading `_ctx.count`
