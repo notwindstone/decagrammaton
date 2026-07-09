@@ -61,8 +61,10 @@
     "vite": "^8.1.1"
   },
   "dependencies": {
+    "@sigrea/core": "^0.7.2",
+    "@vue/compiler-core": "^3.5.39",
+    "@vue/compiler-sfc": "^3.5.39",
     "acorn": "^8.17.0",
-    "alien-signals": "^3.2.1",
     "typescript": "~6.0.2"
   }
 }
