@@ -45,13 +45,17 @@
 </script>
 
 <template>
-  <div>
+  <div style={{ "display": "flex", "flex-direction": "column", "max-width": "192px" }}>
     <select value={tripType.value} @change={handleTripTypeChange}>
       <option value="one-way">one-way</option>
       <option value="round-trip">round-trip</option>
     </select>
 
-    <input type="date" value={startDate.value} @change={handleStartDateChange} />
+    <input
+      type="date"
+      value={startDate.value}
+      @change={handleStartDateChange}
+    />
 
     <input
       type="date"
@@ -60,7 +64,13 @@
       disabled={!isRoundTrip.value}
     />
 
-    <button @click={book} disabled={!canBook.value}>Book</button>
+    <button
+      style={{ "background-color": "gray" }}
+      @click={book}
+      disabled={!canBook.value}
+    >
+      { canBook.value ? "Book" : "Cannot book..." }
+    </button>
 
     <!-- Reactively show confirmation message -->
     <p :if={message.value !== ""} style="color: green; font-weight: bold;">

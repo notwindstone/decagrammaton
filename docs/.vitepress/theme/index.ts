@@ -3,9 +3,9 @@ import { h } from 'vue'
 import type { Theme } from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
 import './style.css'
-import Counter from "./components/Counter.vue";
 import RenderDeca from "./components/RenderDeca.vue";
 import TreeView from "./components/TreeView.vue";
+import Counter from "./components/7guis/Counter.vue";
 import FlightBooker from "./components/7guis/FlightBooker.vue";
 import TemperatureConverter from "./components/7guis/TemperatureConverter.vue";
 

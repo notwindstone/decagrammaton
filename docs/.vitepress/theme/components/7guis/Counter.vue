@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Counter from "./Counter.deca";
-import RenderDeca from "./RenderDeca.vue";
+import RenderDeca from "../RenderDeca.vue";
 </script>
 
 <template>

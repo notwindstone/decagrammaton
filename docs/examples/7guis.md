@@ -2,6 +2,8 @@
 
 ## Counter
 
+<Counter />
+
 ## Temperature Converter
 
 <TemperatureConverter />
