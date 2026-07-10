@@ -1,6 +1,6 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS } from "../tables.ts";
-import { rewriteExpression } from "./expression.ts";
+import { rewriteExpression, rewriteHandler } from "./expression.ts";
 import type { IRNode, IRElement, IRText, IRInterpolation, IRIf } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
@@ -64,7 +64,7 @@ function genElement(node: IRElement, ctx: Ctx): string {
     if (!method) {
       throw new DecaCompileError(`Unknown event "@${event.name}" — no whitelisted Ark handler.`);
     }
-    ctx.lines.push(`on(${name}, ${JSON.stringify(event.name)}, ${rewriteExpression(event.handler)});`);
+    ctx.lines.push(`on(${name}, ${JSON.stringify(event.name)}, ${rewriteHandler(event.handler)});`);
   }
 
   for (const child of node.children) {

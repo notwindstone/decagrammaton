@@ -16,7 +16,8 @@ const computedShow = computed(() => count.value % 2 === 0);
 
 <template>
   <button @click="inc">{{ count }}</button>
+  <button @click="count++">inline ++</button>
   <button @click="toggle">toggle</button>
-  <p v-if="computedShow">visible ({{ show }})</p>
-  <div v-else>hidden</div>
+  <p v-if="count % 2 === 0">visible ({{ show }})</p>
+  <div v-else>hidden ({{ computedShow }})</div>
 </template>

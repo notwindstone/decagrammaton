@@ -68,7 +68,9 @@
     "@sigrea/core": "^0.7.2",
     "@vue/compiler-core": "^3.5.39",
     "@vue/compiler-sfc": "^3.5.39",
+    "@vue/shared": "^3.5.39",
     "acorn": "^8.17.0",
+    "acorn-walk": "^8.3.5",
     "typescript": "~6.0.2"
   }
 }

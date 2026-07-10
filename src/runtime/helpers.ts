@@ -128,14 +128,25 @@ export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<
 
 // Wrap the setup() return in an auto-unwrapping context. Reading `_ctx.count`
 // returns the underlying value of a sigrea signal (tracked when inside a
-// renderEffect); functions and plain values pass through untouched. This gives
-// Vue-identical template ergonomics ({{ count }} shows the number) without the
-// template needing to write `.value`.
+// renderEffect); functions and plain values pass through untouched. Writing
+// `_ctx.count = v` assigns to the signal's `.value` (so inline handlers like
+// `@click="count++"` mutate the signal instead of replacing it with a number);
+// writing a non-signal key falls through to a plain set. This gives
+// Vue-identical template ergonomics ({{ count }} shows the number, `count++`
+// increments it) without the template needing to write `.value`.
 export function createContext(setupResult: Record<string, unknown>): Record<string, unknown> {
   return new Proxy(setupResult, {
     get(target, key: string) {
       const value = Reflect.get(target, key);
       return isSignal(value) ? (value as { value: unknown }).value : value;
+    },
+    set(target, key: string, incoming) {
+      const current = Reflect.get(target, key);
+      if (isSignal(current)) {
+        (current as { value: unknown }).value = incoming;
+        return true;
+      }
+      return Reflect.set(target, key, incoming);
     },
   });
 }
