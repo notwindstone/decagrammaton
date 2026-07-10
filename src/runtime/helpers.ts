@@ -248,6 +248,10 @@ function createRow(
 
 // Reuse a row: write the new values into its signals (only on change). With sync
 // flush the row's bindings re-run immediately — no remount, DOM identity kept.
+// INVARIANT: `row.key` is left untouched because a row is only ever reused when
+// its key already equals the new key (suffix/prefix key-equality or a hit in the
+// candidate map). Callers must uphold that — reusing a row under a different key
+// would leave `row.key` stale and corrupt the next diff.
 function updateRow(row: Row, item: unknown, keyVal: unknown, indexVal: unknown): void {
   if (row.itemSig.value !== item) row.itemSig.value = item;
   if (row.keySig && row.keySig.value !== keyVal) row.keySig.value = keyVal;
@@ -295,10 +299,23 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
 
     // Precompute keys while this effect is still the active subscriber, so a
     // key that reads an item field is tracked as a dep of the list.
+    //
+    // Duplicate keys would collapse in the keyed diff's `new Map(oldCand)`
+    // (later same-key entries overwrite earlier ones), stranding the earlier
+    // row: neither reused nor unmounted → a zombie node with a live scope. We
+    // fail loud instead, mirroring normalizeValues — a friendly dev-mode
+    // warn-and-recover is a later slice. Runs every diff (keys can collide on
+    // any update, not just mount), keyed path only (unkeyed has no getKey).
     let newKeys: Array<unknown> | null = null;
     if (getKey) {
       newKeys = new Array(newLen);
-      for (let i = 0; i < newLen; i++) newKeys[i] = getKey(values[i], i, undefined);
+      const seen = new Set<unknown>();
+      for (let i = 0; i < newLen; i++) {
+        const k = getKey(values[i], i, undefined);
+        if (seen.has(k)) throw new Error("v-for keys must be unique; duplicate key: " + String(k));
+        seen.add(k);
+        newKeys[i] = k;
+      }
     }
 
     // A/B: initial mount, or all-new (no old rows) — create each, append at tail.
