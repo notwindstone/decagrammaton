@@ -62,12 +62,28 @@ function recordIdentifier(node: AcornNode, state: PrefixState): void {
 
 // A function scope: its params bind new locals that shadow outer identifiers for
 // the duration of the body (and default-value expressions).
+//
+// Only EXPRESSION-bodied functions (`() => expr`) are supported. A block body
+// (`() => { ... }`, or any `function` declaration/expression, which always has a
+// block body) introduces its own bindings — `const`/`let`/`var`, the function's
+// own name, loop/catch variables — that this prefixer does NOT track. Rather
+// than silently mis-prefix a local use site to `_ctx.x` (reads undefined at
+// runtime), we reject statement bodies: multi-statement logic belongs in a
+// `<script setup>` method, referenced by name.
 function walkFunction(
   node: AcornNode,
   state: PrefixState,
   callback: walk.WalkerCallback<PrefixState>,
 ): void {
   const fn = node as unknown as { params: Array<AcornNode>; body: AcornNode };
+
+  if ((fn.body as { type: string }).type === "BlockStatement") {
+    throw new DecaCompileError(
+      "Statement-body functions are not supported in template expressions " +
+        "(write `() => expr`, or move the logic to a method in <script setup>).",
+    );
+  }
+
   const locals = new Set(state.locals);
 
   for (const param of fn.params) {
@@ -112,17 +128,26 @@ function walkProperty(
 // An assignment's left-hand side is walked by acorn-walk as a binding Pattern,
 // whose base `VariablePattern` visitor IGNORES a plain identifier — so `show` in
 // `show = !show` would never be prefixed. Record an identifier LHS explicitly;
-// a member LHS (`obj.x = 1`) recurses normally and needs no special case.
+// a member LHS (`obj.x = 1`) recurses normally and needs no special case. A
+// destructuring target (`[a, b] = ...`, `{ x } = ...`) is rejected: its bound
+// identifiers would leak bare (the same VariablePattern=ignore path), producing
+// a ReferenceError in the strict-mode module — and destructuring params already
+// throw, so this keeps the two consistent.
 function walkAssignment(
   node: AcornNode,
   state: PrefixState,
   callback: walk.WalkerCallback<PrefixState>,
 ): void {
   const assign = node as unknown as { left: AcornNode; right: AcornNode };
-  if ((assign.left as { type: string }).type === "Identifier") {
+  const leftType = (assign.left as { type: string }).type;
+  if (leftType === "Identifier") {
     recordIdentifier(assign.left, state);
-  } else {
+  } else if (leftType === "MemberExpression") {
     callback(assign.left as AnyNode, state);
+  } else {
+    throw new DecaCompileError(
+      "Destructuring assignment targets in template expressions are not supported yet.",
+    );
   }
   callback(assign.right as AnyNode, state);
 }
