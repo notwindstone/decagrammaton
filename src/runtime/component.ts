@@ -1,6 +1,6 @@
 import type { SafeElement, SafeDocument, SafeTextNode } from "ark-of-atrahasis";
 import { createScope, runWithScope, type Scope } from "../reactivity.ts";
-import { createContext, createIf, isRootIf } from "./helpers.ts";
+import { createContext, createIf, isRootIf, createFor, isRootFor } from "./helpers.ts";
 
 // A compiled component module, as produced by the vite plugin: the setup()
 // factory plus the generated render() function.
@@ -43,6 +43,11 @@ export function createApp(root: ComponentModule): AppInstance {
             // insertBefore, reordering siblings on screen. Do NOT change the flush.
             container.appendChild(node.anchor as SafeTextNode);
             createIf(container, node.anchor, node.branches);
+          } else if (isRootFor(node)) {
+            // Same trip-wire as isRootIf: the anchor is appended, then createFor
+            // synchronously inserts the initial rows before it (flush:"sync").
+            container.appendChild(node.anchor as SafeTextNode);
+            createFor(container, node.anchor, node.config);
           } else {
             container.appendChild(node as SafeElement);
           }

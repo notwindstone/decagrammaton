@@ -1,6 +1,7 @@
 import type { SafeElement, SafeTextNode, EventHandler, EventCleanup } from "ark-of-atrahasis";
 import {
   watchEffect,
+  signal,
   isSignal,
   onDispose,
   getCurrentScope,
@@ -149,4 +150,289 @@ export function createContext(setupResult: Record<string, unknown>): Record<stri
       return Reflect.set(target, key, incoming);
     },
   });
+}
+
+// ── v-for ──────────────────────────────────────────────────────────────────
+//
+// createFor reconciles a reactive keyed list against ark node creation. It is a
+// port of @vue/runtime-vapor's apiCreateFor (right-to-left placement with anchor
+// resolution) MINUS the prevAnchor linked-list optimisation: going right-to-left
+// and tracking the successor row's first node yields the same insert reference
+// directly. No LIS, no VDOM. Explicit-tree throughout — every row node comes from
+// a whitelisted ark creator emitted by codegen.
+
+// The loop aliases from `v-for="(value, key, index) in source"`. `value` is
+// always present; `key`/`index` are null when the template omits them.
+export interface ForAliases {
+  value: string;
+  key: string | null;
+  index: string | null;
+}
+
+// The codegen-emitted config for one v-for site (see codegen genForConfig).
+export interface ForConfig {
+  // The outer component context — the row proxy delegates non-alias reads here.
+  ctx: Record<string, unknown>;
+  // Lazy list getter, read inside the reactive effect so the source tracks.
+  source: () => unknown;
+  aliases: ForAliases;
+  // Builds one row's nodes; receives the per-row proxy as its `_ctx`.
+  factory: (rowCtx: Record<string, unknown>) => Array<SafeNode>;
+  // The `:key` function `(value, key, index) => keyExpr`, or null when unkeyed.
+  key: ((item: unknown, key: unknown, index: unknown) => unknown) | null;
+}
+
+type ValueSignal = { value: unknown };
+
+// One rendered row. `scope` owns the row's interpolation effects + event
+// cleanups (disposed on removal); the signals feed the row proxy so a reused
+// row re-renders in place (write itemSig.value → the row's bindings re-run).
+interface Row {
+  nodes: Array<SafeNode>;
+  scope: Scope;
+  key: unknown;
+  itemSig: ValueSignal;
+  keySig: ValueSignal | null;
+  indexSig: ValueSignal | null;
+}
+
+// A layered context for one row: alias reads resolve to the row's own signals
+// (tracked); everything else delegates to the outer component ctx (which itself
+// unwraps signals). This is why the row body prefixer stays unchanged — the
+// generated `_ctx.item` routes here to itemSig, `_ctx.count` falls through to the
+// component. Only aliases that were actually declared (non-null) intercept.
+function rowContext(
+  outer: Record<string, unknown>,
+  aliases: ForAliases,
+  itemSig: ValueSignal,
+  keySig: ValueSignal | null,
+  indexSig: ValueSignal | null,
+): Record<string, unknown> {
+  return new Proxy(outer, {
+    get(target, key: string) {
+      if (key === aliases.value) return itemSig.value;
+      if (keySig && key === aliases.key) return keySig.value;
+      if (indexSig && key === aliases.index) return indexSig.value;
+      return Reflect.get(target, key);
+    },
+    set(target, key: string, incoming) {
+      if (key === aliases.value) { itemSig.value = incoming; return true; }
+      if (keySig && key === aliases.key) { keySig.value = incoming; return true; }
+      if (indexSig && key === aliases.index) { indexSig.value = incoming; return true; }
+      return Reflect.set(target, key, incoming);
+    },
+  });
+}
+
+// Build (but do NOT insert) one row: create its signals, a child scope parented
+// to the component scope, and run the factory inside that scope so its effects
+// die with the row. `keySig`/`indexSig` exist only when the template declared
+// that alias — an undeclared alias can't be referenced, so we skip the signal.
+function createRow(
+  config: ForConfig,
+  parentScope: Scope | undefined,
+  item: unknown,
+  keyVal: unknown,
+  indexVal: unknown,
+): Row {
+  const itemSig = signal(item) as ValueSignal;
+  const keySig = config.aliases.key !== null ? (signal(keyVal) as ValueSignal) : null;
+  const indexSig = config.aliases.index !== null ? (signal(indexVal) as ValueSignal) : null;
+
+  const scope = createScope(parentScope);
+  const proxy = rowContext(config.ctx, config.aliases, itemSig, keySig, indexSig);
+  const nodes = runWithScope(scope, () => config.factory(proxy));
+
+  return { nodes, scope, key: undefined, itemSig, keySig, indexSig };
+}
+
+// Reuse a row: write the new values into its signals (only on change). With sync
+// flush the row's bindings re-run immediately — no remount, DOM identity kept.
+function updateRow(row: Row, item: unknown, keyVal: unknown, indexVal: unknown): void {
+  if (row.itemSig.value !== item) row.itemSig.value = item;
+  if (row.keySig && row.keySig.value !== keyVal) row.keySig.value = keyVal;
+  if (row.indexSig && row.indexSig.value !== indexVal) row.indexSig.value = indexVal;
+}
+
+// Tear down a removed row: dispose its scope (kills its effects/handlers) then
+// detach its nodes from the DOM.
+function unmountRow(row: Row): void {
+  row.scope.dispose();
+  for (const node of row.nodes) node.remove();
+}
+
+// Insert (or relocate) a row's nodes before `ref`. insertBefore on an already-
+// mounted node moves it — that is our reorder primitive, and it preserves node
+// identity (the same node object is relocated, not recreated).
+function insertRow(parent: SafeElement, row: Row, ref: SafeNode): void {
+  for (const node of row.nodes) parent.insertBefore(node, ref);
+}
+
+// Normalise the source to an array. Slice 4 supports array sources (the
+// acceptance shape); nullish → empty (tolerates async-loaded lists). Anything
+// else fails loud rather than silently rendering nothing.
+function normalizeValues(source: unknown): Array<unknown> {
+  if (Array.isArray(source)) return source;
+  if (source == null) return [];
+  throw new Error("v-for source must be an array in this slice.");
+}
+
+// The reconciler. `parent` receives the rows; `anchor` is an already-mounted
+// trailing marker (raw text node) that positions them — the last row inserts
+// before it, and it is the fallback insert reference for the tail. Both are
+// handed in explicitly (ark has no parentNode, so we never read ambient state).
+export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConfig): void {
+  const parentScope = getCurrentScope();
+  const getKey = config.key;
+  let oldBlocks: Array<Row> = [];
+  let mounted = false;
+
+  renderEffect(() => {
+    const values = normalizeValues(config.source());
+    const newLen = values.length;
+    const oldLen = oldBlocks.length;
+    const newBlocks: Array<Row> = new Array(newLen);
+
+    // Precompute keys while this effect is still the active subscriber, so a
+    // key that reads an item field is tracked as a dep of the list.
+    let newKeys: Array<unknown> | null = null;
+    if (getKey) {
+      newKeys = new Array(newLen);
+      for (let i = 0; i < newLen; i++) newKeys[i] = getKey(values[i], i, undefined);
+    }
+
+    // A/B: initial mount, or all-new (no old rows) — create each, append at tail.
+    if (!mounted || oldLen === 0) {
+      mounted = true;
+      for (let i = 0; i < newLen; i++) {
+        const row = createRow(config, parentScope, values[i], i, undefined);
+        if (newKeys) row.key = newKeys[i];
+        newBlocks[i] = row;
+        insertRow(parent, row, anchor);
+      }
+      oldBlocks = newBlocks;
+      return;
+    }
+
+    // C: clear-all — unmount every old row.
+    if (newLen === 0) {
+      for (let i = 0; i < oldLen; i++) unmountRow(oldBlocks[i]);
+      oldBlocks = newBlocks;
+      return;
+    }
+
+    // D: unkeyed — positional patch. Reuse [0,common), mount the tail, unmount
+    // the excess. No key matching, no moves.
+    if (!getKey) {
+      const common = Math.min(oldLen, newLen);
+      for (let i = 0; i < common; i++) {
+        const row = (newBlocks[i] = oldBlocks[i]);
+        updateRow(row, values[i], i, undefined);
+      }
+      for (let i = oldLen; i < newLen; i++) {
+        const row = createRow(config, parentScope, values[i], i, undefined);
+        newBlocks[i] = row;
+        insertRow(parent, row, anchor);
+      }
+      for (let i = newLen; i < oldLen; i++) unmountRow(oldBlocks[i]);
+      oldBlocks = newBlocks;
+      return;
+    }
+
+    // E: keyed diff.
+    const keys = newKeys!;
+    const commonLen = Math.min(oldLen, newLen);
+
+    // 1. Suffix skip: matching tail keys update in place.
+    let endOffset = 0;
+    while (endOffset < commonLen) {
+      const ni = newLen - endOffset - 1;
+      const oi = oldLen - endOffset - 1;
+      const oldRow = oldBlocks[oi];
+      if (oldRow.key !== keys[ni]) break;
+      updateRow(oldRow, values[ni], ni, undefined);
+      newBlocks[ni] = oldRow;
+      endOffset++;
+    }
+
+    const e1 = commonLen - endOffset; // prefix scan boundary
+    const e2 = oldLen - endOffset;    // old middle end
+    const e3 = newLen - endOffset;    // new middle end
+
+    // 2. Prefix scan [0,e1): same-position same-key updates in place; mismatches
+    //    become candidates (old side) and queued work (new side).
+    const queued: Array<[number, unknown, unknown]> = []; // [newIndex, item, key]
+    const oldCand: Array<[unknown, number]> = [];         // [key, oldIndex]
+    for (let i = 0; i < e1; i++) {
+      const oldRow = oldBlocks[i];
+      if (oldRow.key === keys[i]) {
+        updateRow((newBlocks[i] = oldRow), values[i], i, undefined);
+      } else {
+        queued.push([i, values[i], keys[i]]);
+        oldCand.push([oldRow.key, i]);
+      }
+    }
+
+    // 3. Old middle [e1,e2) → all candidates. New middle [e1,e3) → all queued.
+    for (let i = e1; i < e2; i++) oldCand.push([oldBlocks[i].key, i]);
+    for (let i = e1; i < e3; i++) queued.push([i, values[i], keys[i]]);
+
+    // 4. Walk queued RIGHT-TO-LEFT. Reuse when the key exists among candidates
+    //    (delete so leftovers = removals); else mark a mount. `opers` ends up in
+    //    DESCENDING new-index order — exactly the placement order we need.
+    const map = new Map(oldCand);
+    const opers: Array<{ index: number; row: Row } | { index: number; item: unknown; key: unknown }> = [];
+    for (let i = queued.length - 1; i >= 0; i--) {
+      const [index, item, key] = queued[i];
+      const oldIdx = map.get(key);
+      if (oldIdx !== undefined) {
+        map.delete(key);
+        const row = (newBlocks[index] = oldBlocks[oldIdx]);
+        updateRow(row, item, index, undefined);
+        opers.push({ index, row });
+      } else {
+        opers.push({ index, item, key });
+      }
+    }
+
+    // 5. Removals: whatever keys remain unmatched in the candidate map.
+    for (const leftoverIdx of map.values()) unmountRow(oldBlocks[leftoverIdx]);
+
+    // 6. Place. opers is already descending, so when we place index the
+    //    successor newBlocks[index+1] is already positioned (higher index, or a
+    //    suffix/prefix-matched row that never moved). Its first node is the
+    //    insert reference; past the end, the trailing anchor is.
+    for (const oper of opers) {
+      const index = oper.index;
+      const successor = index < newLen - 1 ? newBlocks[index + 1] : null;
+      const ref = successor ? successor.nodes[0]! : anchor;
+      if ("row" in oper) {
+        insertRow(parent, oper.row, ref);
+      } else {
+        const row = createRow(config, parentScope, oper.item, index, undefined);
+        row.key = oper.key;
+        newBlocks[index] = row;
+        insertRow(parent, row, ref);
+      }
+    }
+
+    oldBlocks = newBlocks;
+  });
+}
+
+// A deferred root-level v-for. Like rootIf, render() cannot mount it (only
+// component.ts knows the container), so render returns this marker carrying the
+// already-created anchor + config, and component.ts binds it via createFor.
+export interface RootForMarker {
+  __deca_rootFor__: true;
+  anchor: SafeTextNode;
+  config: ForConfig;
+}
+
+export function rootFor(anchor: SafeTextNode, config: ForConfig): RootForMarker {
+  return { __deca_rootFor__: true, anchor, config };
+}
+
+export function isRootFor(node: unknown): node is RootForMarker {
+  return typeof node === "object" && node !== null && (node as RootForMarker).__deca_rootFor__ === true;
 }

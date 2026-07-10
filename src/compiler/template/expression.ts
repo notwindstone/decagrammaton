@@ -177,13 +177,20 @@ function prefix(source: string, initialLocals: Set<string>): string {
 }
 
 // Rewrite an interpolation / v-if condition expression: prefix free identifiers
-// against `_ctx`.
-export function rewriteExpression(expression: string): string {
+// against `_ctx`. `locals` seeds names that are already bound in the emitted
+// scope and so must stay bare — used by v-for's `:key` callback, whose
+// `(item, key, index)` params are real function locals (raw row values), not
+// `_ctx` members. (Row *bodies* need no seeding: they run with a layered row
+// `_ctx` proxy, so `item` is correctly emitted as `_ctx.item`.)
+export function rewriteExpression(
+  expression: string,
+  locals: Set<string> = new Set(),
+): string {
   const trimmed = expression.trim();
   if (trimmed === "") {
     throw new DecaCompileError("Empty template expression.");
   }
-  return prefix(trimmed, new Set());
+  return prefix(trimmed, new Set(locals));
 }
 
 // Rewrite an `@event` handler, matching Vue's two handler shapes:

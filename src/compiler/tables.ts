@@ -13,6 +13,7 @@ export const TAG_CREATORS: Record<string, string> = {
   footer: "createFooter", main: "createMain", aside: "createAside",
   figure: "createFigure", figcaption: "createFigcaption",
   p: "createText", blockquote: "createBlockquote", pre: "createPre",
+  li: "createListItem", dt: "createTerm", dd: "createDescription",
   table: "createTable", thead: "createThead", tbody: "createTbody",
   tfoot: "createTfoot", tr: "createTr", th: "createTh", td: "createTd",
   caption: "createCaption", colgroup: "createColgroup", col: "createCol",

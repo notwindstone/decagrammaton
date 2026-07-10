@@ -28,6 +28,24 @@ function fail() {
 function recover() {
   error.value = null;
 }
+
+// --- slice 4: reorderable keyed v-for list ---
+const nextId = signal(4);
+const rows = signal([
+  { id: 1, name: "apple" },
+  { id: 2, name: "banana" },
+  { id: 3, name: "cherry" },
+]);
+function addRow() {
+  const id = nextId.value++;
+  rows.value = [...rows.value, { id, name: "item-" + id }];
+}
+function removeFirst() {
+  rows.value = rows.value.slice(1);
+}
+function reverseRows() {
+  rows.value = [...rows.value].reverse();
+}
 </script>
 
 <template>
@@ -56,4 +74,13 @@ function recover() {
   <!-- allowed global stays bare (Math), computed member key prefixes -->
   <p>Max: {{ Math.max(count, 0) }}</p>
   <p>Item: {{ items?.[selectedIndex]?.title ?? "none" }}</p>
+
+  <!-- slice 4: keyed v-for. Reorder/add/remove must keep row identity -->
+  <hr />
+  <button @click="addRow">add row</button>
+  <button @click="removeFirst">remove first</button>
+  <button @click="reverseRows">reverse</button>
+  <ul>
+    <li v-for="(row, i) in rows" :key="row.id">{{ i }}: {{ row.name }} (#{{ row.id }})</li>
+  </ul>
 </template>

@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
-    "ark-of-atrahasis": "^0.3.0",
+    "ark-of-atrahasis": "^0.3.1",
     "vite": "^8.1.1"
   },
   "dependencies": {

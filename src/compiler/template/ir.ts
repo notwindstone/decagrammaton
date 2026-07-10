@@ -10,7 +10,7 @@
 // (static), and Interpolation ({{ expr }}). v-if / v-for / :attr node kinds are
 // added by their own slices.
 
-export type IRNode = IRElement | IRText | IRInterpolation | IRIf;
+export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor;
 
 export interface IRElement {
   kind: "element";
@@ -37,4 +37,23 @@ export interface IRIf {
   kind: "if";
   // Branches for v-if / v-else-if* / v-else. `condition` is null for v-else.
   branches: Array<{ condition: string | null; children: Array<IRNode> }>;
+}
+
+export interface IRFor {
+  kind: "for";
+  // The list expression, e.g. "items" in `v-for="item in items"`. Prefixed
+  // against _ctx at codegen (it reads component state, not a row local).
+  source: string;
+  // Row aliases from forParseResult: `(value, key, index)`. `value` is always
+  // present (`item`); `keyAlias`/`indexAlias` are null when the template omits
+  // them. These are the row-scoped LOCALS — inside a row, `item` resolves to the
+  // current row's value, NOT `_ctx.item`.
+  valueAlias: string;
+  keyAlias: string | null;
+  indexAlias: string | null;
+  // The `:key` expression, e.g. "item.id", or null when unkeyed. It reads row
+  // locals, so it is prefixed with the aliases seeded as locals.
+  keyExpr: string | null;
+  // The row template (the v-for element's own subtree, rendered per item).
+  children: Array<IRNode>;
 }

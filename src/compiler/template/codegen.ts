@@ -1,7 +1,7 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS } from "../tables.ts";
 import { rewriteExpression, rewriteHandler } from "./expression.ts";
-import type { IRNode, IRElement, IRText, IRInterpolation, IRIf } from "./ir.ts";
+import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
 //
@@ -33,6 +33,10 @@ export function generate(nodes: Array<IRNode>): string {
       roots.push(genRootIf(node, ctx));
       continue;
     }
+    if (node.kind === "for") {
+      roots.push(genRootFor(node, ctx));
+      continue;
+    }
     roots.push(genNode(node, ctx));
   }
 
@@ -52,6 +56,9 @@ function genNode(node: IRNode, ctx: Ctx): string {
       // v-if is never a single appendable node; callers special-case it before
       // reaching genNode. Reaching here means a bug in the caller.
       throw new DecaCompileError("Internal: v-if reached genNode (should be handled by caller).");
+    case "for":
+      // Same as v-if: v-for is lowered by genRootFor / genNestedFor, never here.
+      throw new DecaCompileError("Internal: v-for reached genNode (should be handled by caller).");
   }
 }
 
@@ -70,6 +77,10 @@ function genElement(node: IRElement, ctx: Ctx): string {
   for (const child of node.children) {
     if (child.kind === "if") {
       genNestedIf(child, name, ctx);
+      continue;
+    }
+    if (child.kind === "for") {
+      genNestedFor(child, name, ctx);
       continue;
     }
     const childName = genNode(child, ctx);
@@ -95,6 +106,94 @@ function genNestedIf(node: IRIf, parent: string, ctx: Ctx): void {
   ctx.lines.push(`const ${anchor} = gui.createRawText();`);
   ctx.lines.push(`append(${parent}, ${anchor});`);
   ctx.lines.push(`createIf(${parent}, ${anchor}, ${genBranches(node, ctx)});`);
+}
+
+// Root-level v-for: no parent element in render() (only component.ts knows the
+// container), so emit the anchor and return a `rootFor(...)` marker among the
+// roots — the mirror of genRootIf.
+function genRootFor(node: IRFor, ctx: Ctx): string {
+  const anchor = `n${ctx.counter++}`;
+  ctx.lines.push(`const ${anchor} = gui.createRawText();`);
+  return `rootFor(${anchor}, ${genForConfig(node, ctx)})`;
+}
+
+// Nested v-for: append the anchor to the in-scope parent const and wire
+// createFor directly (mirror of genNestedIf).
+function genNestedFor(node: IRFor, parent: string, ctx: Ctx): void {
+  const anchor = `n${ctx.counter++}`;
+  ctx.lines.push(`const ${anchor} = gui.createRawText();`);
+  ctx.lines.push(`append(${parent}, ${anchor});`);
+  ctx.lines.push(`createFor(${parent}, ${anchor}, ${genForConfig(node, ctx)});`);
+}
+
+// The createFor config object. Both root and nested sites emit the same config;
+// only the leading `(parent, anchor, …)` differs (marker vs direct call).
+//
+//   {
+//     ctx: _ctx,                                  // outer ctx, for the row proxy
+//     source: () => _ctx.items,                   // list getter (reads outer ctx)
+//     aliases: { value: "item", key: "i", index: null },
+//     factory: (_ctx) => { …row nodes…; return [root] }, // _ctx = per-row proxy
+//     key: (item, i) => item.id,                  // key fn, or null when unkeyed
+//   }
+//
+// The factory's `_ctx` param SHADOWS render's outer `_ctx`: the reconciler passes
+// a per-row proxy that resolves the loop aliases to the row's signals and
+// delegates everything else to the outer ctx (`ctx` above). So the row-body
+// prefixer needs no change — `{{ item.title }}` still emits `_ctx.item.title`
+// and routes correctly, while `{{ count }}` routes to the outer ctx.
+function genForConfig(node: IRFor, ctx: Ctx): string {
+  const source = `() => ${rewriteExpression(node.source)}`;
+
+  const aliases =
+    `{ value: ${JSON.stringify(node.valueAlias)}, ` +
+    `key: ${node.keyAlias === null ? "null" : JSON.stringify(node.keyAlias)}, ` +
+    `index: ${node.indexAlias === null ? "null" : JSON.stringify(node.indexAlias)} }`;
+
+  const factory = genRowFactory(node.children, ctx);
+  const keyFn = genKeyFn(node);
+
+  return (
+    `{ ctx: _ctx, source: ${source}, aliases: ${aliases}, ` +
+    `factory: ${factory}, key: ${keyFn} }`
+  );
+}
+
+// A row factory builds one row's nodes with its own private line buffer (same
+// swapped-buffer trick as genBranchFactory). A row is a single element this
+// slice — matching the v-if branch-root rule — so bare text / nested for at the
+// row top level is a transform bug; fail loud.
+function genRowFactory(children: Array<IRNode>, ctx: Ctx): string {
+  const saved = ctx.lines;
+  const buffer: Array<string> = [];
+  ctx.lines = buffer;
+
+  const roots: Array<string> = [];
+  for (const child of children) {
+    if (child.kind !== "element") {
+      throw new DecaCompileError("Internal: v-for row root must be a single element.");
+    }
+    roots.push(genNode(child, ctx));
+  }
+
+  ctx.lines = saved;
+  const body = buffer.map((l) => `    ${l}`).join("\n");
+  return `(_ctx) => {\n${body}\n    return [${roots.join(", ")}];\n  }`;
+}
+
+// The `:key` function: `(value, key, index) => keyExpr`. Its params are real row
+// values (called during the diff, not tracked), so the aliases are seeded as
+// locals and stay bare — `item.id` becomes `item.id`, NOT `_ctx.item.id`. Null
+// when the list is unkeyed (positional reconcile).
+function genKeyFn(node: IRFor): string {
+  if (node.keyExpr === null) return "null";
+
+  const params: Array<string> = [node.valueAlias];
+  const locals = new Set<string>([node.valueAlias]);
+  if (node.keyAlias !== null) { params.push(node.keyAlias); locals.add(node.keyAlias); }
+  if (node.indexAlias !== null) { params.push(node.indexAlias); locals.add(node.indexAlias); }
+
+  return `(${params.join(", ")}) => ${rewriteExpression(node.keyExpr, locals)}`;
 }
 
 // Lower each branch into an `{ condition, factory }` IfBranch literal. The

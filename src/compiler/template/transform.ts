@@ -7,7 +7,19 @@ import {
   NodeTypes,
 } from "@vue/compiler-core";
 import { DecaCompileError } from "../errors.ts";
-import type { IRNode, IRElement, IRIf } from "./ir.ts";
+import type { IRNode, IRElement, IRIf, IRFor } from "./ir.ts";
+
+// baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
+// confirmed): `source`/`value`/`key`/`index` arrive as expression nodes, so we
+// never hand-split the alias string. `value` (the item alias) is always present
+// on a well-formed v-for; `key`/`index` are absent unless the template writes
+// `(item, i, idx)`.
+interface ForParseResultLike {
+  source: SimpleExpressionNode;
+  value?: SimpleExpressionNode;
+  key?: SimpleExpressionNode;
+  index?: SimpleExpressionNode;
+}
 
 // Walk the @vue/compiler-core AST into our explicit-tree IR.
 //
@@ -45,6 +57,14 @@ function transformChildren(children: Array<TemplateChildNode>): Array<IRNode> {
         const group = collectIfGroup(children, i);
         out.push(group.node);
         i = group.next - 1; // -1 because the for-loop re-increments
+        continue;
+      }
+
+      // A v-for is self-contained: one element renders as one reactive list.
+      // Unlike v-if it does not fold siblings, so no group scan is needed.
+      const forResult = forDirective(child);
+      if (forResult) {
+        out.push(transformFor(child, forResult));
         continue;
       }
     }
@@ -119,6 +139,76 @@ function conditionalDirective(
   return null;
 }
 
+// Return the v-for directive's parsed result, or null. baseParse hands us the
+// alias split via `forParseResult`; we only surface it here.
+function forDirective(node: ElementNode): ForParseResultLike | null {
+  for (const prop of node.props) {
+    if (prop.type !== NodeTypes.DIRECTIVE) continue;
+    const dir = prop as DirectiveNode;
+    if (dir.name === "for") {
+      const parsed = (dir as unknown as { forParseResult?: ForParseResultLike })
+        .forParseResult;
+      if (!parsed || !parsed.source) {
+        throw new DecaCompileError(`Malformed v-for on <${node.tag}>.`);
+      }
+      return parsed;
+    }
+  }
+  return null;
+}
+
+// Lower a v-for element into an IRFor. The row template is the element rendered
+// with its v-for/`:key` directives stripped (they are consumed here, not by the
+// row's own transformElement). v-if + v-for on the SAME element is rejected:
+// Vue gives v-if higher priority so it cannot see the loop variable — always a
+// footgun. Fail loud; nest instead.
+function transformFor(node: ElementNode, parsed: ForParseResultLike): IRFor {
+  if (conditionalDirective(node)) {
+    throw new DecaCompileError(
+      `v-if and v-for on the same <${node.tag}> is not supported — ` +
+        `wrap the v-for element in a v-if parent (or vice versa) instead.`,
+    );
+  }
+
+  const value = parsed.value?.content;
+  if (!value) {
+    throw new DecaCompileError(
+      `v-for on <${node.tag}> has no item alias (write \`item in items\`).`,
+    );
+  }
+
+  return {
+    kind: "for",
+    source: parsed.source.content,
+    valueAlias: value,
+    keyAlias: parsed.key?.content ?? null,
+    indexAlias: parsed.index?.content ?? null,
+    keyExpr: keyBinding(node),
+    children: [transformElement(node)],
+  };
+}
+
+// Extract the `:key` bind expression from a v-for element, or null when
+// unkeyed. `:key` arrives as a normal v-bind prop (arg "key").
+function keyBinding(node: ElementNode): string | null {
+  for (const prop of node.props) {
+    if (prop.type !== NodeTypes.DIRECTIVE) continue;
+    const dir = prop as DirectiveNode;
+    if (dir.name !== "bind") continue;
+    const arg = dir.arg as SimpleExpressionNode | undefined;
+    if (arg && arg.isStatic && arg.content === "key") {
+      const exp = dir.exp as SimpleExpressionNode | undefined;
+      if (!exp) {
+        throw new DecaCompileError(`:key on <${node.tag}> has no expression.`);
+      }
+      return exp.content;
+    }
+  }
+  return null;
+}
+
+// Transform a single non-conditional, non-loop child. Conditional groups and
+// v-for are handled by transformChildren before this is reached.
 function transformChild(node: TemplateChildNode): IRNode | null {
   switch (node.type) {
     case NodeTypes.ELEMENT:
@@ -163,6 +253,22 @@ function transformElement(node: ElementNode): IRElement {
       // transformChildren; the element itself just renders its own content.
       if (dir.name === "if" || dir.name === "else-if" || dir.name === "else") {
         continue;
+      }
+
+      // v-for and its `:key` are consumed by transformFor (which then renders
+      // this element as the row template); skip them here.
+      if (dir.name === "for") {
+        continue;
+      }
+      if (dir.name === "bind") {
+        const arg = dir.arg as SimpleExpressionNode | undefined;
+        if (arg && arg.isStatic && arg.content === "key") {
+          continue;
+        }
+        // Other v-bind attributes (`:class`, `:href`, …) arrive in slice 5.
+        throw new DecaCompileError(
+          `Unsupported attribute binding on <${node.tag}> in this slice.`,
+        );
       }
 
       if (dir.name === "on") {
