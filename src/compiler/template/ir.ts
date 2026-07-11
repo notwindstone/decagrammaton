@@ -10,7 +10,7 @@
 // (static), and Interpolation ({{ expr }}). v-if / v-for / :attr node kinds are
 // added by their own slices.
 
-export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor;
+export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor | IRComponent;
 
 export interface IRElement {
   kind: "element";
@@ -62,4 +62,18 @@ export interface IRFor {
   keyExpr: string | null;
   // The row template (the v-for element's own subtree, rendered per item).
   children: Array<IRNode>;
+}
+
+export interface IRComponent {
+  kind: "component";
+  // The component tag as written, e.g. "Child". Codegen resolves it at RUNTIME
+  // via `_ctx.Child` (the setup-const import binding) — unlike a plain element
+  // there is no build-time creator to whitelist, because a component is an
+  // already-compiled safe module composing whitelisted ark leaves, not a leaf.
+  tag: string;
+  // Props passed by the parent. `name` is the prop as written (author casing,
+  // preserved — component prop names are case-sensitive, unlike HTML attrs).
+  // `dynamic` splits a `:prop="expr"` bind (value is a template expression,
+  // read reactively) from a static `prop="literal"` (value is the literal).
+  props: Array<{ name: string; value: string; dynamic: boolean }>;
 }

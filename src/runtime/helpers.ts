@@ -135,11 +135,28 @@ export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<
 // writing a non-signal key falls through to a plain set. This gives
 // Vue-identical template ergonomics ({{ count }} shows the number, `count++`
 // increments it) without the template needing to write `.value`.
-export function createContext(setupResult: Record<string, unknown>): Record<string, unknown> {
+//
+// `props` (slice 6) is a SECOND layer, resolved UNDER setup state: a template id
+// the setup return does not own falls through to the props proxy. compileScript
+// returns the props *bag* (`{ props, x, … }`) but NOT the individual prop names,
+// so `{{ label }}` -> `_ctx.label` would read undefined without this layer.
+// Setup state wins on collision (own key), so a same-named local shadows a prop —
+// matching Vue. Props default to an empty object, so the root createApp path
+// (no props) is unchanged.
+export function createContext(
+  setupResult: Record<string, unknown>,
+  props: Record<string, unknown> = {},
+): Record<string, unknown> {
   return new Proxy(setupResult, {
     get(target, key: string) {
       const value = Reflect.get(target, key);
-      return isSignal(value) ? (value as { value: unknown }).value : value;
+      // Own-and-defined setup state wins; only a genuine miss falls to props.
+      // (`value !== undefined` short-circuits the common case; the hasOwnProperty
+      // check keeps an explicitly-`undefined` own key from leaking to props.)
+      if (value !== undefined || Object.prototype.hasOwnProperty.call(target, key)) {
+        return isSignal(value) ? (value as { value: unknown }).value : value;
+      }
+      return Reflect.get(props, key);
     },
     set(target, key: string, incoming) {
       const current = Reflect.get(target, key);
@@ -148,6 +165,21 @@ export function createContext(setupResult: Record<string, unknown>): Record<stri
         return true;
       }
       return Reflect.set(target, key, incoming);
+    },
+  });
+}
+
+// Wrap the parent's per-prop getters into the object the child's setup receives
+// (`const props = __props`) and that createContext falls through to. Each prop is
+// a getter emitted by codegen (`{ count: () => _ctx.x }`): reading `props.count`
+// invokes it, so a read inside the child's renderEffect tracks the PARENT signal
+// the getter closes over — that is what makes props reactive with no extra
+// machinery. A key with no getter reads undefined (Vue's absent-prop semantics).
+export function createProps(getters: Record<string, () => unknown>): Record<string, unknown> {
+  return new Proxy(getters, {
+    get(target, key: string) {
+      const getter = Reflect.get(target, key);
+      return typeof getter === "function" ? getter() : undefined;
     },
   });
 }

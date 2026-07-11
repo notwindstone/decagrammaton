@@ -1,5 +1,6 @@
 <script setup>
 import { signal, computed } from "decagrammaton";
+import Greeting from "./Greeting.vue";
 
 const count = signal(0);
 function inc() {
@@ -51,6 +52,9 @@ function reverseRows() {
 <template>
   <button @click="inc">{{ count }}</button>
   <button @click="count++">inline ++</button>
+
+  <!-- slice 6: child component with static + dynamic (reactive) props -->
+  <Greeting name="world" :count="count" />
   <button @click="toggle">toggle</button>
   <p v-if="count % 2 === 0">visible ({{ show }})</p>
   <div v-else>hidden ({{ computedShow }})</div>

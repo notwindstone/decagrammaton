@@ -7,7 +7,7 @@ import {
   NodeTypes,
 } from "@vue/compiler-core";
 import { DecaCompileError } from "../errors.ts";
-import type { IRNode, IRElement, IRIf, IRFor } from "./ir.ts";
+import type { IRNode, IRElement, IRIf, IRFor, IRComponent } from "./ir.ts";
 
 // baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
 // confirmed): `source`/`value`/`key`/`index` arrive as expression nodes, so we
@@ -235,11 +235,18 @@ function transformChild(node: TemplateChildNode): IRNode | null {
   }
 }
 
-function transformElement(node: ElementNode): IRElement {
-  // ElementType 0 = plain element. Components/slots/templates come later.
+function transformElement(node: ElementNode): IRElement | IRComponent {
+  // Component tags (tagType 1) are resolved at RUNTIME via `_ctx[tag]`, not via a
+  // build-time ark creator — a component is a compiled safe module, not a leaf.
+  // Routing here (the single ElementNode handler) means components compose
+  // everywhere an element does: as a child, a v-if branch root, or a v-for row.
+  // Slots (2) and <template> (3) remain unsupported.
+  if (node.tagType === 1) {
+    return transformComponent(node);
+  }
   if (node.tagType !== 0) {
     throw new DecaCompileError(
-      `Unsupported element "${node.tag}" (components/slots not in this slice).`,
+      `Unsupported element "${node.tag}" (slots/<template> not in this slice).`,
     );
   }
 
@@ -316,6 +323,74 @@ function transformElement(node: ElementNode): IRElement {
     attrs,
     children: transformChildren(node.children),
   };
+}
+
+// Lower a component tag (tagType 1) into an IRComponent. Props are captured the
+// same way element attrs are (static NodeTypes.ATTRIBUTE vs dynamic `:prop`
+// v-bind), but with author casing preserved — component prop names are
+// case-sensitive. Structural directives (v-if/v-else*/v-for and the v-for `:key`)
+// are consumed by the grouping passes and skipped here, exactly as for elements.
+// Component `@events` (defineEmits) and slots are out of this slice — fail loud.
+function transformComponent(node: ElementNode): IRComponent {
+  if (node.children.length > 0) {
+    throw new DecaCompileError(
+      `Slots on <${node.tag}> are not in this slice (component children unsupported).`,
+    );
+  }
+
+  const props: IRComponent["props"] = [];
+
+  for (const prop of node.props) {
+    if (prop.type === NodeTypes.DIRECTIVE) {
+      const dir = prop as DirectiveNode;
+
+      // Consumed by the grouping / for passes before this element renders.
+      if (dir.name === "if" || dir.name === "else-if" || dir.name === "else") continue;
+      if (dir.name === "for") continue;
+
+      if (dir.name === "bind") {
+        const arg = dir.arg as SimpleExpressionNode | undefined;
+        // The v-for `:key` on a component element is consumed by transformFor.
+        if (arg && arg.isStatic && arg.content === "key") continue;
+        if (!arg || !arg.isStatic) {
+          throw new DecaCompileError(
+            `Dynamic prop names on <${node.tag}> are not supported.`,
+          );
+        }
+        const exp = dir.exp as SimpleExpressionNode | undefined;
+        if (!exp) {
+          throw new DecaCompileError(
+            `:${arg.content} on <${node.tag}> has no expression.`,
+          );
+        }
+        props.push({ name: arg.content, value: exp.content, dynamic: true });
+        continue;
+      }
+
+      if (dir.name === "on") {
+        throw new DecaCompileError(
+          `Component events (@${(dir.arg as SimpleExpressionNode | undefined)?.content ?? ""}) ` +
+            `on <${node.tag}> are not in this slice (defineEmits comes later).`,
+        );
+      }
+
+      throw new DecaCompileError(
+        `Unsupported directive "v-${dir.name}" on <${node.tag}> in this slice.`,
+      );
+    }
+
+    // Static prop: `msg="hi"`. A valueless prop (`disabled`) becomes boolean
+    // true — Vue's presence semantics — emitted as the literal string "true"
+    // (codegen JSON-stringifies static values; a real boolean would need a
+    // separate emit path, and props are untyped here, so the string is fine).
+    props.push({
+      name: prop.name,
+      value: prop.value?.content ?? "true",
+      dynamic: false,
+    });
+  }
+
+  return { kind: "component", tag: node.tag, props };
 }
 
 function transformOn(dir: DirectiveNode, tag: string): { name: string; handler: string } {

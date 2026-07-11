@@ -1,7 +1,7 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS, ATTR_SETTERS } from "../tables.ts";
 import { rewriteExpression, rewriteHandler } from "./expression.ts";
-import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor } from "./ir.ts";
+import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
 //
@@ -48,6 +48,8 @@ function genNode(node: IRNode, ctx: Ctx): string {
   switch (node.kind) {
     case "element":
       return genElement(node, ctx);
+    case "component":
+      return genComponent(node, ctx);
     case "text":
       return genText(node, ctx);
     case "interpolation":
@@ -227,8 +229,8 @@ function genRowFactory(children: Array<IRNode>, ctx: Ctx): string {
 
   const roots: Array<string> = [];
   for (const child of children) {
-    if (child.kind !== "element") {
-      throw new DecaCompileError("Internal: v-for row root must be a single element.");
+    if (child.kind !== "element" && child.kind !== "component") {
+      throw new DecaCompileError("Internal: v-for row root must be a single element or component.");
     }
     roots.push(genNode(child, ctx));
   }
@@ -277,8 +279,8 @@ function genBranchFactory(children: Array<IRNode>, ctx: Ctx): string {
 
   const roots: Array<string> = [];
   for (const child of children) {
-    if (child.kind !== "element") {
-      throw new DecaCompileError("Internal: v-if branch root must be a single element.");
+    if (child.kind !== "element" && child.kind !== "component") {
+      throw new DecaCompileError("Internal: v-if branch root must be a single element or component.");
     }
     roots.push(genNode(child, ctx));
   }
@@ -286,6 +288,35 @@ function genBranchFactory(children: Array<IRNode>, ctx: Ctx): string {
   ctx.lines = saved;
   const body = buffer.map((l) => `    ${l}`).join("\n");
   return `() => {\n${body}\n    return [${roots.join(", ")}];\n  }`;
+}
+
+// Resolve a component tag to a runtime `createComponent` call. Unlike an
+// element, a component has NO build-time ark creator — it is resolved at runtime
+// via `_ctx[tag]` (the setup-const import binding, e.g. `_ctx.Child`). This does
+// not breach the whitelist: the whitelist gates ark leaf DOM methods (still
+// resolved at build time inside the child's own compiled render); a component is
+// a compiled safe module composing those leaves.
+//
+// Props are emitted as UNIFORM getters — `{ count: () => _ctx.x, msg: () => "hi" }`.
+// A getter read inside the child's renderEffect tracks the parent's signal, so a
+// dynamic prop stays reactive with no extra machinery; a static prop is just a
+// constant getter. The child-side props proxy (component.ts) calls the getter on
+// read. `gui` is threaded from render's own param so the child can create nodes.
+function genComponent(node: IRComponent, ctx: Ctx): string {
+  const name = `n${ctx.counter++}`;
+  ctx.lines.push(
+    `const ${name} = createComponent(${rewriteExpression(node.tag)}, ${genProps(node.props)}, gui);`,
+  );
+  return name;
+}
+
+function genProps(props: IRComponent["props"]): string {
+  if (props.length === 0) return "{}";
+  const parts = props.map((p) => {
+    const value = p.dynamic ? rewriteExpression(p.value) : JSON.stringify(p.value);
+    return `${JSON.stringify(p.name)}: () => ${value}`;
+  });
+  return `{ ${parts.join(", ")} }`;
 }
 
 function genText(node: IRText, ctx: Ctx): string {

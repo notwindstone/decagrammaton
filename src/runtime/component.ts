@@ -1,6 +1,6 @@
 import type { SafeElement, SafeDocument, SafeTextNode } from "ark-of-atrahasis";
-import { createScope, runWithScope, type Scope } from "../reactivity.ts";
-import { createContext, createIf, isRootIf, createFor, isRootFor } from "./helpers.ts";
+import { createScope, runWithScope, getCurrentScope, type Scope } from "../reactivity.ts";
+import { createContext, createProps, createIf, isRootIf, createFor, isRootFor } from "./helpers.ts";
 
 // A compiled component module, as produced by the vite plugin: the setup()
 // factory plus the generated render() function.
@@ -57,4 +57,53 @@ export function createApp(root: ComponentModule): AppInstance {
       return () => scope.dispose();
     },
   };
+}
+
+// Mount a child component instance (slice 6). Called from a parent's generated
+// render() for every `<Child …/>` tag: `createComponent(_ctx.Child, props, gui)`.
+//
+// Mirrors createApp.mount, with three differences: (1) the child scope is
+// parented to the CURRENT scope (getCurrentScope, active because the parent's
+// render runs inside runWithScope), so disposing the parent tears the child down
+// too — same lineage discipline as createIf/createFor; (2) props flow in: the
+// codegen getters are wrapped by createProps and handed to BOTH setup(__props)
+// and createContext's fall-through layer, so a prop read inside a child effect
+// tracks the parent signal; (3) it RETURNS the child's root node instead of
+// appending — the parent's render splices it like any other node.
+//
+// Single-root only (architect ruling): the child's render must yield exactly one
+// node, and it must be a real node — a root-level v-if/v-for marker has no
+// container to bind into here (that is the deferred fragment machinery). Both
+// cases fail loud rather than silently mounting nothing.
+export function createComponent(
+  module: ComponentModule,
+  propGetters: Record<string, () => unknown>,
+  gui: SafeDocument,
+): SafeElement {
+  if (module == null || typeof module.setup !== "function" || typeof module.render !== "function") {
+    throw new Error("createComponent: target is not a component (missing setup/render).");
+  }
+
+  const scope: Scope = createScope(getCurrentScope());
+  const props = createProps(propGetters);
+
+  return runWithScope(scope, () => {
+    const setupResult = module.setup(props, { expose: () => {} });
+    const ctx = createContext(setupResult, props);
+    const nodes = module.render(ctx, gui);
+
+    if (nodes.length !== 1) {
+      throw new Error(
+        `A component must have exactly one root node (got ${nodes.length}); ` +
+          `multi-root components are not supported in this slice.`,
+      );
+    }
+    const root = nodes[0];
+    if (isRootIf(root) || isRootFor(root)) {
+      throw new Error(
+        "A component root cannot be a bare v-if/v-for; wrap it in a single root element.",
+      );
+    }
+    return root as SafeElement;
+  });
 }
