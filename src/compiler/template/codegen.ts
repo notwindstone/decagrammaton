@@ -1,7 +1,7 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS, ATTR_SETTERS } from "../tables.ts";
-import { rewriteExpression, rewriteHandler } from "./expression.ts";
-import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent } from "./ir.ts";
+import { rewriteExpression, rewriteHandler, rewriteModelTarget } from "./expression.ts";
+import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
 //
@@ -93,6 +93,14 @@ function genElement(node: IRElement, ctx: Ctx): string {
     ctx.lines.push(`append(${name}, ${childName});`);
   }
 
+  // v-model is emitted AFTER children on purpose: a <select>'s value can only be
+  // set once its <option>s exist in the DOM (the browser silently drops a value
+  // with no matching option, defaulting to the first). Inputs/textarea have no
+  // such children, so the position is harmless for them.
+  if (node.model) {
+    genModel(node.model, name, ctx);
+  }
+
   return name;
 }
 
@@ -150,6 +158,72 @@ function genAttr(
     ctx.lines.push(`${target}.${setter}(${JSON.stringify(attr.value)});`);
   }
 }
+
+// Emit a v-model two-way binding on `target` (the element const). Two directions:
+//
+//   READ  (state → DOM): a renderEffect that sets the DOM property from the model
+//         expression, so an external write to the signal repaints the field.
+//   WRITE (DOM → state): an `on()` event handler that reads the element back
+//         (`getValue`/`getChecked` — NOT `$event.target`, which ark's frozen
+//         SafeEvent limits to `{ id, value }`, no `.checked`) and assigns through
+//         the model lvalue. The assignment routes through createContext's set-trap
+//         to the underlying signal (identical to how `@click="count++"` writes).
+//
+// The lvalue is rewriteModelTarget'd (asserted assignable + prefixed); the read
+// side is a normal rewriteExpression so it tracks the signal inside the effect.
+function genModel(model: IRModel, target: string, ctx: Ctx): void {
+  const lvalue = rewriteModelTarget(model.expression);
+  const read = rewriteExpression(model.expression);
+
+  if (model.kind === "checkbox") {
+    // Boolean model ↔ checked. `change` fires on toggle; `!!` coerces the model
+    // to a definite boolean for the setter.
+    ctx.lines.push(`renderEffect(() => ${target}.setChecked(!!${read}));`);
+    ctx.lines.push(`on(${target}, "change", () => { ${lvalue} = ${target}.getChecked(); });`);
+    return;
+  }
+
+  if (model.kind === "checkbox-array") {
+    // Vue's array binding: the box is checked when its value is a member of the
+    // model array; toggling it produces a NEW array (add on check, remove on
+    // uncheck) assigned back through the set-trap — a fresh array reference so the
+    // signal actually fires (in-place mutation wouldn't). modelArrayHas /
+    // modelArrayToggle are runtime helpers; the value is a static JSON literal.
+    const value = JSON.stringify(model.staticValue);
+    ctx.lines.push(`renderEffect(() => ${target}.setChecked(modelArrayHas(${read}, ${value})));`);
+    ctx.lines.push(
+      `on(${target}, "change", () => { ${lvalue} = modelArrayToggle(${read}, ${value}, ${target}.getChecked()); });`,
+    );
+    return;
+  }
+
+  if (model.kind === "radio") {
+    // The element is checked when the model equals THIS radio's value; picking
+    // it writes that value back. staticValue is a static string (JSON literal).
+    const value = JSON.stringify(model.staticValue);
+    ctx.lines.push(`renderEffect(() => ${target}.setChecked(${read} === ${value}));`);
+    ctx.lines.push(
+      `on(${target}, "change", () => { if (${target}.getChecked()) ${lvalue} = ${value}; });`,
+    );
+    return;
+  }
+
+  // text-like input / textarea / select. Coerce the model to a string for the
+  // setter (matches Vue's `value == null ? "" : String(value)`).
+  ctx.lines.push(`renderEffect(() => ${target}.setValue(String(${read} ?? "")));`);
+
+  // Read the raw string back, then apply modifiers in Vue's order: trim first,
+  // then numeric coercion (toModelNumber leaves an unparseable string as-is).
+  let readback = `${target}.getValue()`;
+  if (model.trim) readback = `${readback}.trim()`;
+  if (model.number) readback = `toModelNumber(${readback})`;
+
+  // A <select> commits on `change` (there is no per-keystroke `input`); a
+  // text input/textarea commits on `input`, or on `change` under `.lazy`.
+  const event = model.kind === "select" || model.lazy ? "change" : "input";
+  ctx.lines.push(`on(${target}, ${JSON.stringify(event)}, () => { ${lvalue} = ${readback}; });`);
+}
+
 // render root. component.ts appends the anchor to the container and binds
 // createIf there (the only site that knows the container).
 function genRootIf(node: IRIf, ctx: Ctx): string {

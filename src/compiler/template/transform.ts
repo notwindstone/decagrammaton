@@ -7,7 +7,7 @@ import {
   NodeTypes,
 } from "@vue/compiler-core";
 import { DecaCompileError } from "../errors.ts";
-import type { IRNode, IRElement, IRIf, IRFor, IRComponent } from "./ir.ts";
+import type { IRNode, IRElement, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
 
 // baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
 // confirmed): `source`/`value`/`key`/`index` arrive as expression nodes, so we
@@ -252,6 +252,7 @@ function transformElement(node: ElementNode): IRElement | IRComponent {
 
   const events: IRElement["events"] = [];
   const attrs: IRElement["attrs"] = [];
+  let modelDir: DirectiveNode | null = null;
 
   for (const prop of node.props) {
     if (prop.type === NodeTypes.DIRECTIVE) {
@@ -266,6 +267,21 @@ function transformElement(node: ElementNode): IRElement | IRComponent {
       // v-for and its `:key` are consumed by transformFor (which then renders
       // this element as the row template); skip them here.
       if (dir.name === "for") {
+        continue;
+      }
+
+      // v-model: a two-way binding, at most one per element. It is validated and
+      // lowered AFTER the loop (buildModel) because the static `type`/`value`
+      // attrs it depends on — to pick the checkbox/radio kind and to detect a
+      // `value` conflict — can appear in any order relative to the directive.
+      // Here we only capture it and forbid duplicates.
+      if (dir.name === "model") {
+        if (modelDir !== null) {
+          throw new DecaCompileError(
+            `Multiple v-model bindings on <${node.tag}> are not supported (one per element).`,
+          );
+        }
+        modelDir = dir;
         continue;
       }
       if (dir.name === "bind") {
@@ -321,8 +337,120 @@ function transformElement(node: ElementNode): IRElement | IRComponent {
     tag: node.tag,
     events,
     attrs,
+    model: modelDir ? buildModel(modelDir, node, attrs) : null,
     children: transformChildren(node.children),
   };
+}
+
+// Lower a captured v-model directive into an IRModel, using the element's
+// already-collected static attrs to pick the kind and enforce conflicts.
+//
+// Rules (all fail loud — the codebase's whole ethos is "reject rather than
+// silently mis-bind"):
+//   - v-model:arg (`v-model:foo`) — component v-model with a named model is out
+//     of scope; only the default model is supported.
+//   - a missing expression.
+//   - `.number`/`.trim` on a checkbox/radio — nonsensical (the model is a
+//     boolean / the fixed radio value), so reject rather than silently ignore.
+//   - a `:type` DYNAMIC bind — the kind must be known at build time to choose
+//     the getter/setter pair; a runtime-varying type has no single lowering.
+//   - a `value` / `:value` on text or checkbox — it fights the model for the
+//     same DOM property (v-model owns value/checked). Radio REQUIRES a static
+//     `value` (that is the value it writes back), so it is the one exception.
+function buildModel(
+  dir: DirectiveNode,
+  node: ElementNode,
+  attrs: IRElement["attrs"],
+): IRModel {
+  if (dir.arg) {
+    const arg = dir.arg as SimpleExpressionNode;
+    throw new DecaCompileError(
+      `v-model:${arg.content} on <${node.tag}> (named/component models) is not supported in this slice.`,
+    );
+  }
+
+  const exp = dir.exp as SimpleExpressionNode | undefined;
+  if (!exp || exp.content.trim() === "") {
+    throw new DecaCompileError(`v-model on <${node.tag}> has no expression.`);
+  }
+
+  // Reject a dynamic `:type` — the kind is a build-time decision.
+  for (const prop of node.props) {
+    if (prop.type === NodeTypes.DIRECTIVE) {
+      const d = prop as DirectiveNode;
+      if (d.name === "bind") {
+        const arg = d.arg as SimpleExpressionNode | undefined;
+        if (arg && arg.isStatic && arg.content.toLowerCase() === "type") {
+          throw new DecaCompileError(
+            `v-model on <${node.tag}> requires a static \`type\` (a dynamic :type has no single lowering).`,
+          );
+        }
+      }
+    }
+  }
+
+  // Modifiers arrive as expression nodes (probe-confirmed), so read `.content`.
+  const mods = new Set(
+    (dir.modifiers as ReadonlyArray<{ content: string }>).map((m) => m.content),
+  );
+  const lazy = mods.has("lazy");
+  const number = mods.has("number");
+  const trim = mods.has("trim");
+
+  // The tag drives the element family; only <input> subdivides by `type`.
+  const tag = node.tag.toLowerCase();
+  if (tag !== "input" && tag !== "textarea" && tag !== "select") {
+    throw new DecaCompileError(
+      `v-model on <${node.tag}> is not supported — only <input>, <textarea>, and <select>.`,
+    );
+  }
+
+  const staticType = attrs.find((a) => a.name.toLowerCase() === "type" && !a.dynamic)?.value;
+  const hasValueAttr = attrs.some((a) => a.name.toLowerCase() === "value");
+  const staticValueAttr = attrs.find((a) => a.name.toLowerCase() === "value" && !a.dynamic)?.value;
+
+  let kind: IRModel["kind"] = "text";
+  let staticValue: string | null = null;
+
+  if (tag === "select") {
+    kind = "select";
+  } else if (tag === "input" && staticType === "checkbox") {
+    // A checkbox with a static `value` is Vue's ARRAY binding (checked ⇔ the
+    // value is a member); a bare checkbox is the boolean binding. The decision
+    // is made here at build time from the presence of a static value.
+    if (staticValueAttr !== undefined) {
+      kind = "checkbox-array";
+      staticValue = staticValueAttr;
+    } else {
+      kind = "checkbox";
+    }
+  } else if (tag === "input" && staticType === "radio") {
+    kind = "radio";
+    if (staticValueAttr === undefined) {
+      throw new DecaCompileError(
+        `v-model on a radio <${node.tag}> requires a static \`value\` (that is the value it selects).`,
+      );
+    }
+    staticValue = staticValueAttr;
+  }
+
+  if ((kind === "checkbox" || kind === "checkbox-array" || kind === "radio") && (number || trim)) {
+    throw new DecaCompileError(
+      `v-model .number/.trim modifiers are meaningless on a ${kind === "radio" ? "radio" : "checkbox"} <${node.tag}>.`,
+    );
+  }
+
+  // value/checked belongs to v-model. Radio's `value` (the write-back value) and
+  // an array-checkbox's `value` (the array member) are the exceptions — there the
+  // static value IS the model's data, not a competing bind. A boolean checkbox or
+  // a text input must not carry a `value`.
+  if (kind !== "radio" && kind !== "checkbox-array" && hasValueAttr) {
+    throw new DecaCompileError(
+      `<${node.tag}> has both v-model and a \`value\` — v-model owns the value; remove one.`,
+    );
+  }
+
+  return { kind, expression: exp.content, staticValue, lazy, number, trim };
 }
 
 // Lower a component tag (tagType 1) into an IRComponent. Props are captured the
@@ -347,6 +475,13 @@ function transformComponent(node: ElementNode): IRComponent {
       // Consumed by the grouping / for passes before this element renders.
       if (dir.name === "if" || dir.name === "else-if" || dir.name === "else") continue;
       if (dir.name === "for") continue;
+
+      if (dir.name === "model") {
+        throw new DecaCompileError(
+          `v-model on component <${node.tag}> is not supported in this slice ` +
+            `(component models need defineModel/emits).`,
+        );
+      }
 
       if (dir.name === "bind") {
         const arg = dir.arg as SimpleExpressionNode | undefined;

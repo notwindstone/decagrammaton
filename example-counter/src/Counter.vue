@@ -1,6 +1,7 @@
 <script setup>
 import { signal, computed, provide } from "decagrammaton";
 import Greeting from "./Greeting.vue";
+import TreeView from "./TreeView.vue";
 
 const count = signal(0);
 function inc() {
@@ -49,9 +50,22 @@ function reverseRows() {
 }
 
 provide("hii", failureCount);
+
+// --- v-model showcase (all kinds + modifiers) ---
+const text = signal("hello");
+const bio = signal("multi\nline");
+const agree = signal(false);
+const picked = signal(["A"]);      // array-checkbox binding
+const choice = signal("b");        // radio group
+const fruit = signal("banana");    // select
+const age = signal(0);             // .number
+const tag = signal("");            // .trim
+const draft = signal("");          // .lazy
 </script>
 
 <template>
+  <TreeView />
+
   <button @click="inc">{{ count }}</button>
   <button @click="count++">inline ++</button>
 
@@ -89,4 +103,40 @@ provide("hii", failureCount);
   <ul>
     <li v-for="(row, i) in rows" :key="row.id">{{ i }}: {{ row.name }} (#{{ row.id }})</li>
   </ul>
+
+  <!-- v-model: every kind + modifier, each echoed live -->
+  <hr />
+  <input v-model="text" />
+  <p>text: {{ text }}</p>
+
+  <textarea v-model="bio"></textarea>
+  <p>bio: {{ bio }}</p>
+
+  <input type="checkbox" v-model="agree" />
+  <p>agree: {{ agree }}</p>
+
+  <input type="checkbox" value="A" v-model="picked" />
+  <input type="checkbox" value="B" v-model="picked" />
+  <input type="checkbox" value="C" v-model="picked" />
+  <p>picked: {{ picked }}</p>
+
+  <input type="radio" value="a" v-model="choice" />
+  <input type="radio" value="b" v-model="choice" />
+  <p>choice: {{ choice }}</p>
+
+  <select v-model="fruit">
+    <option value="apple">apple</option>
+    <option value="banana">banana</option>
+    <option value="cherry">cherry</option>
+  </select>
+  <p>fruit: {{ fruit }}</p>
+
+  <input v-model.number="age" />
+  <p>age: {{ age }}</p>
+
+  <input v-model.trim="tag" />
+  <p>tag: "{{ tag }}"</p>
+
+  <input v-model.lazy="draft" />
+  <p>draft (lazy): {{ draft }}</p>
 </template>

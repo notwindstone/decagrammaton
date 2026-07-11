@@ -218,3 +218,29 @@ export function rewriteHandler(expression: string): string {
   const inner = prefix(trimmed, new Set(["$event"]));
   return `$event => (${inner})`;
 }
+
+// Rewrite a `v-model` target expression. It must be an assignable lvalue,
+// because codegen emits `_ctx.<target> = <readback>` on every input event — so
+// only a plain Identifier (`text`) or a MemberExpression (`form.name`,
+// `items[i]`) is allowed. A call, literal, ternary, etc. would produce invalid
+// or silently-wrong assignment code, so reject it loud here (mirrors the
+// statement-body / destructuring rejections elsewhere in this file). The result
+// is prefixed against `_ctx` like any other expression, so `text` becomes
+// `_ctx.text` and routes through createContext's set-trap to the signal.
+export function rewriteModelTarget(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed === "") {
+    throw new DecaCompileError("Empty v-model expression.");
+  }
+
+  const ast = parseExpression(trimmed);
+  const type = ast.type;
+  if (type !== "Identifier" && type !== "MemberExpression") {
+    throw new DecaCompileError(
+      `v-model target ${JSON.stringify(trimmed)} must be an assignable ` +
+        `reference (a variable or a member like \`form.name\`), not a ${type}.`,
+    );
+  }
+
+  return prefix(trimmed, new Set());
+}

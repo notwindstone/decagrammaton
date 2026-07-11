@@ -229,4 +229,253 @@ describe("Vue 3 template usages", () => {
     select.dispatchEvent(new Event("change"));
     expect(selected.value).toBe("apple");
   });
+
+  /*
+   * GPT-5.5-made tests
+   */
+  test("nested aliases shadow outer context correctly", () => {
+    const item = signal("outer");
+    const items = signal(["A", "B"]);
+
+    const { app } = mountTemplate(
+      `<div v-for="item in items">{{ item }}</div><p>{{ item }}</p>`,
+      { item, items }
+    );
+
+    const divs = app.querySelectorAll("div");
+    expect(divs[0].textContent).toBe("A");
+    expect(divs[1].textContent).toBe("B");
+    expect(app.querySelector("p")!.textContent).toBe("outer");
+  });
+
+  test("destructured v-for aliases resolve correctly", () => {
+    const users = signal([
+      { name: "Alice", age: 20 },
+      { name: "Bob", age: 30 }
+    ]);
+
+    const { app } = mountTemplate(
+      `<div v-for="{ name, age } in users">{{ name }}-{{ age }}</div>`,
+      { users }
+    );
+
+    const divs = app.querySelectorAll("div");
+    expect(divs[0].textContent).toBe("Alice-20");
+    expect(divs[1].textContent).toBe("Bob-30");
+  });
+
+  test("member expressions update reactively", () => {
+    const user = signal({ profile: { name: "Alice" } });
+
+    const { app } = mountTemplate(
+      `<p>{{ user.profile.name }}</p>`,
+      { user }
+    );
+
+    expect(app.textContent).toBe("Alice");
+
+    user.value = {
+      profile: {
+        name: "Bob"
+      }
+    };
+
+    expect(app.textContent).toBe("Bob");
+  });
+
+  test("v-if inside v-for updates correctly", () => {
+    const items = signal([
+      { text: "A", show: true },
+      { text: "B", show: false }
+    ]);
+
+    const { app } = mountTemplate(
+      `<div v-for="item in items">
+      <span v-if="item.show">{{ item.text }}</span>
+    </div>`,
+      { items }
+    );
+
+    expect(app.querySelectorAll("span")).toHaveLength(1);
+
+    items.value = [
+      { text: "A", show: true },
+      { text: "B", show: true }
+    ];
+
+    expect(app.querySelectorAll("span")).toHaveLength(2);
+  });
+
+  test("multiple sibling v-if chains are independent", () => {
+    const a = signal(true);
+    const b = signal(false);
+
+    const { app } = mountTemplate(
+      `
+    <span v-if="a">A</span>
+    <span v-else>No A</span>
+
+    <span v-if="b">B</span>
+    <span v-else>No B</span>
+    `,
+      { a, b }
+    );
+
+    expect(app.textContent).toBe("ANo B");
+
+    a.value = false;
+    expect(app.textContent).toBe("No ANo B");
+
+    b.value = true;
+    expect(app.textContent).toBe("No AB");
+  });
+
+  test("inline handler can mutate nested property", () => {
+    const user = signal({ name: "Alice" });
+
+    const { app } = mountTemplate(
+      `<button @click="user.name = 'Bob'"></button>`,
+      { user }
+    );
+
+    app.querySelector("button")!.click();
+
+    expect(user.value.name).toBe("Bob");
+  });
+
+  test("event object is available as $event", () => {
+    const value = signal("");
+
+    const { app } = mountTemplate(
+      `<input @input="value = $event.target.value" />`,
+      { value }
+    );
+
+    const input = app.querySelector("input") as HTMLInputElement;
+
+    input.value = "hello";
+    input.dispatchEvent(new Event("input"));
+
+    expect(value.value).toBe("hello");
+  });
+
+  test("v-model preserves numeric zero", () => {
+    const value = signal(0);
+
+    const { app } = mountTemplate(
+      `<input v-model="value" />`,
+      { value }
+    );
+
+    const input = app.querySelector("input") as HTMLInputElement;
+
+    expect(input.value).toBe("0");
+  });
+
+  test("v-model handles empty string", () => {
+    const value = signal("");
+
+    const { app } = mountTemplate(
+      `<input v-model="value" />`,
+      { value }
+    );
+
+    const input = app.querySelector("input") as HTMLInputElement;
+
+    expect(input.value).toBe("");
+
+    input.value = "abc";
+    input.dispatchEvent(new Event("input"));
+
+    expect(value.value).toBe("abc");
+
+    input.value = "";
+    input.dispatchEvent(new Event("input"));
+
+    expect(value.value).toBe("");
+  });
+
+  test("checkbox array removes duplicate values correctly", () => {
+    const picked = signal<string[]>([]);
+
+    const { app } = mountTemplate(
+      `<input type="checkbox" value="A" v-model="picked" />`,
+      { picked }
+    );
+
+    const input = app.querySelector("input") as HTMLInputElement;
+
+    input.checked = true;
+    input.dispatchEvent(new Event("change"));
+
+    input.checked = true;
+    input.dispatchEvent(new Event("change"));
+
+    expect(picked.value).toEqual(["A"]);
+  });
+
+  test("dynamic class binding updates", () => {
+    const active = signal(false);
+
+    const { app } = mountTemplate(
+      `<div :class="active ? 'active' : 'inactive'"></div>`,
+      { active }
+    );
+
+    const div = app.querySelector("div")!;
+
+    expect(div.className).toBe("inactive");
+
+    active.value = true;
+
+    expect(div.className).toBe("active");
+  });
+
+  test("dynamic boolean attributes update", () => {
+    const disabled = signal(false);
+
+    const { app } = mountTemplate(
+      `<button :disabled="disabled">Click</button>`,
+      { disabled }
+    );
+
+    const button = app.querySelector("button")!;
+
+    expect(button.disabled).toBe(false);
+
+    disabled.value = true;
+
+    expect(button.disabled).toBe(true);
+  });
+
+  test("template literals evaluate reactively", () => {
+    const first = signal("Alice");
+    const last = signal("Smith");
+
+    const { app } = mountTemplate(
+      `<div>{{ \`${first} ${last}\` }}</div>`,
+      { first, last }
+  );
+
+    expect(app.textContent).toBe("Alice Smith");
+
+    last.value = "Jones";
+
+    expect(app.textContent).toBe("Alice Jones");
+  });
+
+  test("array methods inside interpolations update reactively", () => {
+    const items = signal(["A", "B", "C"]);
+
+    const { app } = mountTemplate(
+      `<div>{{ items.join(", ") }}</div>`,
+      { items }
+    );
+
+    expect(app.textContent).toBe("A, B, C");
+
+    items.value = ["X", "Y"];
+
+    expect(app.textContent).toBe("X, Y");
+  });
 });

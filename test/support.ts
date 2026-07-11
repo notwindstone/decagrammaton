@@ -52,12 +52,12 @@ export function compileRender(template: string): (ctx: unknown, gui: SafeDocumen
   const src = renderSource(template).replace(/^export\s+function\s+render/, "function render");
   const make = new Function(
     "renderEffect", "on", "setText", "append",
-    "createIf", "rootIf", "createFor", "rootFor", "createComponent",
+    "createIf", "rootIf", "createFor", "rootFor", "createComponent", "toModelNumber", "modelArrayHas", "modelArrayToggle",
     `${src}\nreturn render;`,
   );
   return make(
     runtime.renderEffect, runtime.on, runtime.setText, runtime.append,
-    runtime.createIf, runtime.rootIf, runtime.createFor, runtime.rootFor, runtime.createComponent,
+    runtime.createIf, runtime.rootIf, runtime.createFor, runtime.rootFor, runtime.createComponent, runtime.toModelNumber, runtime.modelArrayHas, runtime.modelArrayToggle,
   );
 }
 

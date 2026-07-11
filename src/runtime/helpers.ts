@@ -53,6 +53,39 @@ export function setText(node: SafeTextNode, value: unknown): void {
   node.setText(value == null ? "" : String(value));
 }
 
+// v-model `.number` coercion. Mirrors Vue's `looseToNumber`: parse the string;
+// if the parse yields NaN (non-numeric input like "" or "abc"), return the
+// ORIGINAL string untouched rather than writing NaN into the model. So a
+// half-typed field stays a string until it is a valid number, matching Vue.
+export function toModelNumber(raw: string): string | number {
+  const n = parseFloat(raw);
+  return isNaN(n) ? raw : n;
+}
+
+// v-model array-checkbox READ: is `value` currently a member of the model array?
+// The model may be nullish before it is populated (tolerated → not checked); a
+// non-array is a template author error (a value-carrying checkbox binds an array
+// in Vue), so we fail loud rather than silently mis-rendering.
+export function modelArrayHas(model: unknown, value: string): boolean {
+  if (model == null) return false;
+  if (!Array.isArray(model)) {
+    throw new Error("v-model on a checkbox with a `value` expects an array model.");
+  }
+  return model.includes(value);
+}
+
+// v-model array-checkbox WRITE: return a NEW array with `value` added (checked)
+// or removed (unchecked). A fresh reference is required — the model is a signal,
+// and assigning the same mutated array back would not trip the set-trap's change
+// detection. Order is preserved; adding is idempotent (no duplicates).
+export function modelArrayToggle(model: unknown, value: string, checked: boolean): Array<unknown> {
+  const base = Array.isArray(model) ? model : [];
+  if (checked) {
+    return base.includes(value) ? base.slice() : [...base, value];
+  }
+  return base.filter((v) => v !== value);
+}
+
 // Append a child node to a parent element.
 export function append(parent: SafeElement, child: SafeNode): void {
   parent.appendChild(child);
