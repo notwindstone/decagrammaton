@@ -244,6 +244,7 @@ function transformElement(node: ElementNode): IRElement {
   }
 
   const events: IRElement["events"] = [];
+  const attrs: IRElement["attrs"] = [];
 
   for (const prop of node.props) {
     if (prop.type === NodeTypes.DIRECTIVE) {
@@ -265,10 +266,23 @@ function transformElement(node: ElementNode): IRElement {
         if (arg && arg.isStatic && arg.content === "key") {
           continue;
         }
-        // Other v-bind attributes (`:class`, `:href`, …) arrive in slice 5.
-        throw new DecaCompileError(
-          `Unsupported attribute binding on <${node.tag}> in this slice.`,
-        );
+        // A dynamic attribute binding: `:class="x"`, `:href="url"`,
+        // `:data-id="x"`, … The arg is the attr name; the exp is a template
+        // expression codegen wraps in a renderEffect. Dynamic arg names
+        // (`:[name]="x"`) have no build-time attr to whitelist — reject.
+        if (!arg || !arg.isStatic) {
+          throw new DecaCompileError(
+            `Dynamic attribute names on <${node.tag}> are not supported.`,
+          );
+        }
+        const exp = dir.exp as SimpleExpressionNode | undefined;
+        if (!exp) {
+          throw new DecaCompileError(
+            `:${arg.content} on <${node.tag}> has no expression.`,
+          );
+        }
+        attrs.push({ name: arg.content, value: exp.content, dynamic: true });
+        continue;
       }
 
       if (dir.name === "on") {
@@ -281,16 +295,25 @@ function transformElement(node: ElementNode): IRElement {
       );
     }
 
-    // Static/plain attributes (NodeTypes.ATTRIBUTE) arrive in slice 5.
-    throw new DecaCompileError(
-      `Unsupported attribute on <${node.tag}> in this slice.`,
-    );
+    // Static/plain attributes (NodeTypes.ATTRIBUTE): `class="foo"`. Captured as
+    // a non-dynamic attr — codegen emits one setter call with the literal, no
+    // effect wrapper. A valueless attr (`readonly`, `disabled`) has no content
+    // and is a boolean-present; ark's boolean setters guard on `if (value)`, so
+    // it must be truthy — `"true"`, NOT `""` (empty string is falsy and would
+    // silently no-op the attribute). An explicit `class=""` keeps its own empty
+    // string (nullish-coalescing only fires when there is no value at all).
+    attrs.push({
+      name: prop.name,
+      value: prop.value?.content ?? "true",
+      dynamic: false,
+    });
   }
 
   return {
     kind: "element",
     tag: node.tag,
     events,
+    attrs,
     children: transformChildren(node.children),
   };
 }

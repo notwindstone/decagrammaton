@@ -18,6 +18,12 @@ export interface IRElement {
   tag: string;
   // Event bindings from `@event` / `v-on`. `handler` is a template expression.
   events: Array<{ name: string; handler: string }>;
+  // Attribute bindings (slice 5). `name` is the attr as written in the SFC
+  // (e.g. "class", "data-id", "aria-label"); codegen lowercases it for the
+  // setter lookup and splits the `data-`/`aria-` prefix. `dynamic` distinguishes
+  // a `:attr="expr"` bind (value is a template expression, wrapped in an effect)
+  // from a static `attr="literal"` (value is the literal string, one call).
+  attrs: Array<{ name: string; value: string; dynamic: boolean }>;
   children: Array<IRNode>;
 }
 

@@ -1,5 +1,5 @@
 import { DecaCompileError } from "../errors.ts";
-import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS } from "../tables.ts";
+import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS, ATTR_SETTERS } from "../tables.ts";
 import { rewriteExpression, rewriteHandler } from "./expression.ts";
 import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor } from "./ir.ts";
 
@@ -74,6 +74,10 @@ function genElement(node: IRElement, ctx: Ctx): string {
     ctx.lines.push(`on(${name}, ${JSON.stringify(event.name)}, ${rewriteHandler(event.handler)});`);
   }
 
+  for (const attr of node.attrs) {
+    genAttr(attr, name, node.tag, ctx);
+  }
+
   for (const child of node.children) {
     if (child.kind === "if") {
       genNestedIf(child, name, ctx);
@@ -90,7 +94,60 @@ function genElement(node: IRElement, ctx: Ctx): string {
   return name;
 }
 
-// Root-level v-if: emit the anchor const, return a `rootIf(...)` marker as a
+// Emit one attribute setter on `target` (the element const). Whitelist by
+// construction: the attr name is resolved to a named ark setter, and an attr
+// with no mapping THROWS here at build time — there is no generic setAttribute
+// (§1 security invariant), so an unmapped attr has nothing to call.
+//
+// `data-*` / `aria-*` are the two-arg exception: `setData(key, value)` /
+// `setAria(key, value)`. Everything else is one-arg. Static attrs emit a single
+// call with a string literal; dynamic attrs (`:attr="expr"`) wrap the call in a
+// renderEffect so the setter re-runs when its deps change — the expression is
+// prefixed by rewriteExpression, which also routes v-for row locals correctly.
+function genAttr(
+  attr: IRElement["attrs"][number],
+  target: string,
+  tag: string,
+  ctx: Ctx,
+): void {
+  // baseParse preserves author casing; HTML attrs are case-insensitive, so
+  // normalize to lowercase for the setter lookup and the prefix split.
+  const lower = attr.name.toLowerCase();
+
+  // Two-arg data-/aria- setters. The remainder after the prefix is the key
+  // passed as the first argument (e.g. `data-id` -> setData("id", …)).
+  if (lower.startsWith("data-") || lower.startsWith("aria-")) {
+    const method = lower.startsWith("data-") ? "setData" : "setAria";
+    const key = attr.name.slice(5); // preserve author casing of the key itself
+    const value = attr.dynamic
+      ? rewriteExpression(attr.value)
+      : JSON.stringify(attr.value);
+    if (attr.dynamic) {
+      ctx.lines.push(
+        `renderEffect(() => ${target}.${method}(${JSON.stringify(key)}, ${value}));`,
+      );
+    } else {
+      ctx.lines.push(`${target}.${method}(${JSON.stringify(key)}, ${value});`);
+    }
+    return;
+  }
+
+  const setter = ATTR_SETTERS[lower];
+  if (!setter) {
+    throw new DecaCompileError(
+      `Unknown attribute "${attr.name}" on <${tag}> — no whitelisted Ark setter. ` +
+        `Add it to ATTR_SETTERS only if ark-of-atrahasis exposes a safe setter.`,
+    );
+  }
+
+  if (attr.dynamic) {
+    ctx.lines.push(
+      `renderEffect(() => ${target}.${setter}(${rewriteExpression(attr.value)}));`,
+    );
+  } else {
+    ctx.lines.push(`${target}.${setter}(${JSON.stringify(attr.value)});`);
+  }
+}
 // render root. component.ts appends the anchor to the container and binds
 // createIf there (the only site that knows the container).
 function genRootIf(node: IRIf, ctx: Ctx): string {
