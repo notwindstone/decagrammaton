@@ -83,7 +83,13 @@ function genElement(node: IRElement, ctx: Ctx): string {
     ctx.lines.push(`on(${name}, ${JSON.stringify(event.name)}, ${rewriteHandler(event.handler)});`);
   }
 
+  // `class` / `:class` are handled together (Vue MERGES a static base with the
+  // dynamic binding: `class="btn" :class="{on}"` → `"btn on"`), so pull them out
+  // of the per-attr loop and emit a single coordinated setClass. genClass skips
+  // when neither is present; the remaining attrs route through genAttr as usual.
+  genClass(node.attrs, name, ctx);
   for (const attr of node.attrs) {
+    if (attr.name.toLowerCase() === "class") continue;
     genAttr(attr, name, node.tag, ctx);
   }
 
@@ -121,6 +127,51 @@ function genElement(node: IRElement, ctx: Ctx): string {
 // call with a string literal; dynamic attrs (`:attr="expr"`) wrap the call in a
 // renderEffect so the setter re-runs when its deps change — the expression is
 // prefixed by rewriteExpression, which also routes v-for row locals correctly.
+// Emit the `class` setter, coordinating a static `class="…"` base with a dynamic
+// `:class="…"` binding — Vue MERGES them (`class="btn" :class="{on}"` → `"btn on"`).
+// Four shapes:
+//   - neither present            → nothing emitted.
+//   - static only                → one `setClass("box")` call, no effect (keeps the
+//                                  literal fast-path; unchanged from slice 5).
+//   - dynamic only               → `renderEffect(() => n.setClass(normalizeClass(expr)))`.
+//   - both (merge)               → the dynamic effect wraps `normalizeClass([base, expr])`,
+//                                  so the static base is always present.
+// normalizeClass (runtime) flattens Vue's string/array/object shapes to one class
+// string; ark's setClass replaces the whole attr, so a re-run recomputes cleanly.
+// A duplicate `:class` (two dynamic binds) is a template author error — fail loud.
+function genClass(
+  attrs: IRElement["attrs"],
+  target: string,
+  ctx: Ctx,
+): void {
+  const classAttrs = attrs.filter((a) => a.name.toLowerCase() === "class");
+  if (classAttrs.length === 0) return;
+
+  const dynamics = classAttrs.filter((a) => a.dynamic);
+  if (dynamics.length > 1) {
+    throw new DecaCompileError(
+      "Multiple :class bindings on one element are not supported — combine them into a single array/object.",
+    );
+  }
+
+  const staticAttr = classAttrs.find((a) => !a.dynamic);
+  const dynamic = dynamics[0];
+
+  // Static only: preserve the literal one-call fast path (no normalize, no effect).
+  if (!dynamic) {
+    ctx.lines.push(`${target}.setClass(${JSON.stringify(staticAttr!.value)});`);
+    return;
+  }
+
+  // Dynamic present: the effect recomputes on dep change. Merge the static base in
+  // via an array literal when both exist; otherwise normalize the binding alone.
+  const expr = rewriteExpression(dynamic.value);
+  const arg = staticAttr
+    ? `normalizeClass([${JSON.stringify(staticAttr.value)}, ${expr}])`
+    : `normalizeClass(${expr})`;
+  ctx.lines.push(`renderEffect(() => ${target}.setClass(${arg}));`);
+}
+
 function genAttr(
   attr: IRElement["attrs"][number],
   target: string,

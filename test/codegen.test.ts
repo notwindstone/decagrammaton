@@ -42,8 +42,20 @@ describe("attribute codegen (slice 5)", () => {
   });
 
   test("a dynamic :attr wraps the setter in a renderEffect with a prefixed expr", () => {
+    const src = renderSource(`<div :title="ttl">hi</div>`);
+    expect(src).toContain(`renderEffect(() => n0.setTitle(_ctx.ttl))`);
+  });
+
+  test("a dynamic :class normalizes the binding (Vue object/array/string syntax)", () => {
     const src = renderSource(`<div :class="cls">hi</div>`);
-    expect(src).toContain(`renderEffect(() => n0.setClass(_ctx.cls))`);
+    expect(src).toContain(`renderEffect(() => n0.setClass(normalizeClass(_ctx.cls)))`);
+  });
+
+  test("a static class + dynamic :class merge, static base first", () => {
+    const src = renderSource(`<div class="btn" :class="{ active: on }">hi</div>`);
+    expect(src).toContain(
+      `renderEffect(() => n0.setClass(normalizeClass(["btn", { active: _ctx.on }])))`,
+    );
   });
 
   test("data-/aria- use the two-arg setter, key first, author casing preserved", () => {

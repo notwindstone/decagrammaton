@@ -136,6 +136,45 @@ function camelize(prop: string): string {
   return prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+// `:class` value normalisation — Vue's `normalizeClass`, verbatim algorithm.
+// Flattens the three author shapes into ONE space-joined class string that
+// codegen hands to ark's `setClass` (which REPLACES the whole `class` attr, so a
+// reactive re-run recomputes cleanly — no stale-class diffing needed, unlike
+// :style):
+//   - string   → passed through as-is (`"a b"`).
+//   - array    → each element normalised recursively, then space-joined
+//                (`["a", { b: x }]` — mixed shapes allowed, Vue-identical).
+//   - object   → every key whose value is TRUTHY, space-joined
+//                (`{ bold: isActive, big: false }` → `"bold"` when isActive).
+//   - nullish / other → "" (an absent or non-stringable class contributes nothing).
+//
+// The static+dynamic MERGE (`class="btn" :class="{ active }"`) needs no special
+// case: codegen emits `normalizeClass(["btn", { active: _ctx.active }])`, and the
+// array branch here concatenates the static base with the dynamic result — so the
+// base class is always present, exactly like Vue.
+export function normalizeClass(value: unknown): string {
+  if (typeof value === "string") return value;
+
+  if (Array.isArray(value)) {
+    let out = "";
+    for (const item of value) {
+      const normalized = normalizeClass(item);
+      if (normalized) out += (out ? " " : "") + normalized;
+    }
+    return out;
+  }
+
+  if (value != null && typeof value === "object") {
+    let out = "";
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      if ((value as Record<string, unknown>)[key]) out += (out ? " " : "") + key;
+    }
+    return out;
+  }
+
+  return "";
+}
+
 // v-model `.number` coercion. Mirrors Vue's `looseToNumber`: parse the string;
 // if the parse yields NaN (non-numeric input like "" or "abc"), return the
 // ORIGINAL string untouched rather than writing NaN into the model. So a

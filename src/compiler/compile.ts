@@ -28,7 +28,7 @@ export function compile(source: string, filename: string, id: string): string {
   const renderFn = generate(ir, styles);
 
   return [
-    `import { renderEffect, on, setText, mountStyle, setStyle, append, createIf, rootIf, createFor, rootFor, createComponent, toModelNumber, modelArrayHas, modelArrayToggle } from "decagrammaton/runtime";`,
+    `import { renderEffect, on, setText, mountStyle, setStyle, normalizeClass, append, createIf, rootIf, createFor, rootFor, createComponent, toModelNumber, modelArrayHas, modelArrayToggle } from "decagrammaton/runtime";`,
     ``,
     script.content,
     ``,

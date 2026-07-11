@@ -431,6 +431,58 @@ describe("Vue 3 template usages", () => {
     expect(div.className).toBe("active");
   });
 
+  test("object :class syntax toggles keys by truthiness", () => {
+    const isActive = signal(false);
+
+    const { app } = mountTemplate(
+      `<div :class="{ bold: isActive, box: true }"></div>`,
+      { isActive }
+    );
+
+    const div = app.querySelector("div")!;
+
+    expect(div.className).toBe("box");
+
+    isActive.value = true;
+
+    expect(div.className).toBe("bold box");
+  });
+
+  test("array :class syntax joins strings and objects", () => {
+    const err = signal(false);
+
+    const { app } = mountTemplate(
+      `<div :class="['base', err ? 'error' : '', { active: true }]"></div>`,
+      { err }
+    );
+
+    const div = app.querySelector("div")!;
+
+    expect(div.className).toBe("base active");
+
+    err.value = true;
+
+    expect(div.className).toBe("base error active");
+  });
+
+  test("static class merges with a dynamic object :class (Vue 3 merge)", () => {
+    const isOn = signal(false);
+
+    const { app } = mountTemplate(
+      `<div class="btn" :class="{ active: isOn }"></div>`,
+      { isOn }
+    );
+
+    const div = app.querySelector("div")!;
+
+    // static base is always present; the object key adds on top
+    expect(div.className).toBe("btn");
+
+    isOn.value = true;
+
+    expect(div.className).toBe("btn active");
+  });
+
   test("dynamic boolean attributes update", () => {
     const disabled = signal(false);
 
