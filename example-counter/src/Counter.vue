@@ -1,5 +1,5 @@
 <script setup>
-import { signal, computed } from "decagrammaton";
+import { signal, computed, provide } from "decagrammaton";
 import Greeting from "./Greeting.vue";
 
 const count = signal(0);
@@ -47,6 +47,8 @@ function removeFirst() {
 function reverseRows() {
   rows.value = [...rows.value].reverse();
 }
+
+provide("hii", failureCount);
 </script>
 
 <template>

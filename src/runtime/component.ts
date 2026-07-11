@@ -1,6 +1,12 @@
 import type { SafeElement, SafeDocument, SafeTextNode } from "ark-of-atrahasis";
 import { createScope, runWithScope, getCurrentScope, type Scope } from "../reactivity.ts";
 import { createContext, createProps, createIf, isRootIf, createFor, isRootFor } from "./helpers.ts";
+import {
+  createInstance,
+  getCurrentInstance,
+  setCurrentInstance,
+  type ComponentInstance,
+} from "./instance.ts";
 
 // A compiled component module, as produced by the vite plugin: the setup()
 // factory plus the generated render() function.
@@ -28,29 +34,43 @@ export function createApp(root: ComponentModule): AppInstance {
     mount(container: SafeElement, gui: SafeDocument): () => void {
       const scope: Scope = createScope();
 
-      runWithScope(scope, () => {
-        const setupResult = root.setup({}, { expose: () => {} });
-        const ctx = createContext(setupResult);
-        const nodes = root.render(ctx, gui);
+      // The root instance has no parent (provides = Object.create(null)). The
+      // currentInstance bracket spans setup AND render: children are created by
+      // createComponent during render(), so they must see this instance as their
+      // parent. Restored in finally — after the synchronous mount block returns,
+      // currentInstance is null, so a provide/inject from a later event handler
+      // throws (setup-only, ruling 3).
+      const instance: ComponentInstance = createInstance(null);
 
-        for (const node of nodes) {
-          if (isRootIf(node)) {
-            // TRIP-WIRE: correct root ordering is load-bearing on createIf's
-            // renderEffect being sync + immediate-first-run (flush:"sync"). The
-            // anchor is appended here, then createIf synchronously inserts the
-            // initial branch before it. If the flush ever becomes "pre" (async),
-            // a trailing real root would appendChild before the deferred branch's
-            // insertBefore, reordering siblings on screen. Do NOT change the flush.
-            container.appendChild(node.anchor as SafeTextNode);
-            createIf(container, node.anchor, node.branches);
-          } else if (isRootFor(node)) {
-            // Same trip-wire as isRootIf: the anchor is appended, then createFor
-            // synchronously inserts the initial rows before it (flush:"sync").
-            container.appendChild(node.anchor as SafeTextNode);
-            createFor(container, node.anchor, node.config);
-          } else {
-            container.appendChild(node as SafeElement);
+      runWithScope(scope, () => {
+        const previous = getCurrentInstance();
+        setCurrentInstance(instance);
+        try {
+          const setupResult = root.setup({}, { expose: () => {} });
+          const ctx = createContext(setupResult);
+          const nodes = root.render(ctx, gui);
+
+          for (const node of nodes) {
+            if (isRootIf(node)) {
+              // TRIP-WIRE: correct root ordering is load-bearing on createIf's
+              // renderEffect being sync + immediate-first-run (flush:"sync"). The
+              // anchor is appended here, then createIf synchronously inserts the
+              // initial branch before it. If the flush ever becomes "pre" (async),
+              // a trailing real root would appendChild before the deferred branch's
+              // insertBefore, reordering siblings on screen. Do NOT change the flush.
+              container.appendChild(node.anchor as SafeTextNode);
+              createIf(container, node.anchor, node.branches);
+            } else if (isRootFor(node)) {
+              // Same trip-wire as isRootIf: the anchor is appended, then createFor
+              // synchronously inserts the initial rows before it (flush:"sync").
+              container.appendChild(node.anchor as SafeTextNode);
+              createFor(container, node.anchor, node.config);
+            } else {
+              container.appendChild(node as SafeElement);
+            }
           }
+        } finally {
+          setCurrentInstance(previous);
         }
       });
 
@@ -87,23 +107,38 @@ export function createComponent(
   const scope: Scope = createScope(getCurrentScope());
   const props = createProps(propGetters);
 
-  return runWithScope(scope, () => {
-    const setupResult = module.setup(props, { expose: () => {} });
-    const ctx = createContext(setupResult, props);
-    const nodes = module.render(ctx, gui);
+  // The child instance parents onto whatever instance is current at call time.
+  // createComponent runs inside the PARENT's render bracket (createApp.mount /
+  // an ancestor createComponent set currentInstance before render), so this
+  // captures the parent instance — that lineage is what inject() walks. Like the
+  // root, the bracket spans this child's setup AND render (its own grandchildren
+  // are created during its render), restored in finally.
+  const parentInstance = getCurrentInstance();
+  const instance: ComponentInstance = createInstance(parentInstance);
 
-    if (nodes.length !== 1) {
-      throw new Error(
-        `A component must have exactly one root node (got ${nodes.length}); ` +
-          `multi-root components are not supported in this slice.`,
-      );
+  return runWithScope(scope, () => {
+    const previous = getCurrentInstance();
+    setCurrentInstance(instance);
+    try {
+      const setupResult = module.setup(props, { expose: () => {} });
+      const ctx = createContext(setupResult, props);
+      const nodes = module.render(ctx, gui);
+
+      if (nodes.length !== 1) {
+        throw new Error(
+          `A component must have exactly one root node (got ${nodes.length}); ` +
+            `multi-root components are not supported in this slice.`,
+        );
+      }
+      const root = nodes[0];
+      if (isRootIf(root) || isRootFor(root)) {
+        throw new Error(
+          "A component root cannot be a bare v-if/v-for; wrap it in a single root element.",
+        );
+      }
+      return root as SafeElement;
+    } finally {
+      setCurrentInstance(previous);
     }
-    const root = nodes[0];
-    if (isRootIf(root) || isRootFor(root)) {
-      throw new Error(
-        "A component root cannot be a bare v-if/v-for; wrap it in a single root element.",
-      );
-    }
-    return root as SafeElement;
   });
 }
