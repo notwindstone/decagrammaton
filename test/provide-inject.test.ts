@@ -106,11 +106,17 @@ const fakeNode = () => ({ remove() {} }) as any;
 const fakeParent = { insertBefore() {} } as any;
 const fakeAnchor = fakeNode();
 
+// TS narrows a `let` to its initializer and can't see a write that happens inside
+// a factory closure, so it thinks `captured` is still `null` at the assertion.
+// `Inst` re-widens it back to the real declared type for the toBe() call.
+type Inst = ComponentInstance | null;
+
 describe("directive re-mount instance capture (regression)", () => {
   test("createIf: a branch factory re-run outside the mount bracket sees the owner", () => {
     const owner = createInstance(null);
     const cond = signal(false);
-    let seenOnRemount: ComponentInstance | null | "unset" = "unset";
+    let called = false;
+    let captured: ComponentInstance | null = null;
 
     runWithScope(createScope(), () => {
       runWithInstance(owner, () => {
@@ -118,7 +124,8 @@ describe("directive re-mount instance capture (regression)", () => {
           {
             condition: () => cond.value,
             factory: () => {
-              seenOnRemount = getCurrentInstance();
+              called = true;
+              captured = getCurrentInstance();
               return [fakeNode()];
             },
           },
@@ -128,7 +135,7 @@ describe("directive re-mount instance capture (regression)", () => {
     });
 
     // Initial run picked the v-else branch; the tracked factory hasn't run yet.
-    expect(seenOnRemount).toBe("unset");
+    expect(called).toBe(false);
 
     // Flip the condition from OUTSIDE any bracket — mimics a click handler /
     // reactive update. renderEffect re-runs sync and mounts branch 0's factory.
@@ -136,13 +143,15 @@ describe("directive re-mount instance capture (regression)", () => {
     cond.value = true;
 
     // Before the fix this was null (factory ran with currentInstance null).
-    expect(seenOnRemount).toBe(owner);
+    expect(called).toBe(true);
+    expect(captured as Inst).toBe(owner);
   });
 
   test("createFor: a row factory run outside the mount bracket sees the owner", () => {
     const owner = createInstance(null);
     const items = signal<number[]>([]);
-    let seenInRow: ComponentInstance | null | "unset" = "unset";
+    let called = false;
+    let captured: ComponentInstance | null = null;
 
     runWithScope(createScope(), () => {
       runWithInstance(owner, () => {
@@ -151,7 +160,8 @@ describe("directive re-mount instance capture (regression)", () => {
           source: () => items.value,
           aliases: { value: "x", key: null, index: null },
           factory: () => {
-            seenInRow = getCurrentInstance();
+            called = true;
+            captured = getCurrentInstance();
             return [fakeNode()];
           },
           key: null,
@@ -160,12 +170,13 @@ describe("directive re-mount instance capture (regression)", () => {
     });
 
     // Empty source: no rows built yet, factory not called.
-    expect(seenInRow).toBe("unset");
+    expect(called).toBe(false);
 
     // Grow the list from OUTSIDE the bracket — reactive re-run builds a row.
     expect(getCurrentInstance()).toBeNull();
     items.value = [1];
 
-    expect(seenInRow).toBe(owner);
+    expect(called).toBe(true);
+    expect(captured as Inst).toBe(owner);
   });
 });
