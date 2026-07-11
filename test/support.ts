@@ -26,14 +26,25 @@ import { createSafeDocument, type SafeDocument } from "ark-of-atrahasis";
 import { parseTemplate } from "../src/compiler/parse.ts";
 import { transform } from "../src/compiler/template/transform.ts";
 import { generate } from "../src/compiler/template/codegen.ts";
+import { compile } from "../src/compiler/compile.ts";
 import * as runtime from "../src/runtime/index.ts";
 import { createScope, runWithScope, type Scope } from "../src/reactivity.ts";
 import { createContext } from "../src/runtime/helpers.ts";
 
+// Full-SFC compile to a module source string, via the REAL compile() orchestrator.
+// Needed for tests of behavior that only lives in compile.ts — chiefly the
+// fail-loud <style scoped>/module/lang rejection, which the template-only
+// renderSource path never sees.
+export function compileSFC(source: string, filename = "Test.vue", id = "test"): string {
+  return compile(source, filename, id);
+}
+
 // Template -> the exact source string codegen emits for render(). Used by the
-// string-layer tests (whitelist throws, effect-wrapping shape, prefixing).
-export function renderSource(template: string): string {
-  return generate(transform(parseTemplate(template)));
+// string-layer tests (whitelist throws, effect-wrapping shape, prefixing). An
+// optional `styles` array is threaded straight into generate() so a test can
+// assert the emitted mountStyle(gui, …) lines without a full SFC.
+export function renderSource(template: string, styles: Array<string> = []): string {
+  return generate(transform(parseTemplate(template)), styles);
 }
 
 // Reset the document to a single empty `#app` container and hand back a fresh
@@ -48,15 +59,15 @@ export function freshApp(): { gui: SafeDocument; app: HTMLElement } {
 // helpers exactly as the emitted module's `import { … } from "decagrammaton/
 // runtime"` would. No hand-mirrored render body — this is the genuine codegen
 // output executed, so a codegen regression fails the test.
-export function compileRender(template: string): (ctx: unknown, gui: SafeDocument) => unknown[] {
-  const src = renderSource(template).replace(/^export\s+function\s+render/, "function render");
+export function compileRender(template: string, styles: Array<string> = []): (ctx: unknown, gui: SafeDocument) => unknown[] {
+  const src = renderSource(template, styles).replace(/^export\s+function\s+render/, "function render");
   const make = new Function(
-    "renderEffect", "on", "setText", "append",
+    "renderEffect", "on", "setText", "mountStyle", "setStyle", "append",
     "createIf", "rootIf", "createFor", "rootFor", "createComponent", "toModelNumber", "modelArrayHas", "modelArrayToggle",
     `${src}\nreturn render;`,
   );
   return make(
-    runtime.renderEffect, runtime.on, runtime.setText, runtime.append,
+    runtime.renderEffect, runtime.on, runtime.setText, runtime.mountStyle, runtime.setStyle, runtime.append,
     runtime.createIf, runtime.rootIf, runtime.createFor, runtime.rootFor, runtime.createComponent, runtime.toModelNumber, runtime.modelArrayHas, runtime.modelArrayToggle,
   );
 }
@@ -70,12 +81,13 @@ export function compileRender(template: string): (ctx: unknown, gui: SafeDocumen
 export function mountTemplate(
   template: string,
   state: Record<string, unknown>,
+  styles: Array<string> = [],
 ): { app: HTMLElement; gui: SafeDocument; scope: Scope; ctx: Record<string, unknown> } {
   const { gui, app } = freshApp();
   // The ark SafeElement for the container: appends must go through ark's own
   // appendChild (which unwraps to the real node), exactly like createApp.mount.
   const container = gui.getElement("app")!;
-  const render = compileRender(template);
+  const render = compileRender(template, styles);
   const ctx = createContext(state);
   const scope = createScope();
   runWithScope(scope, () => {

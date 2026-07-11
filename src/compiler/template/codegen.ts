@@ -24,9 +24,16 @@ interface Ctx {
   counter: number;
 }
 
-export function generate(nodes: Array<IRNode>): string {
+export function generate(nodes: Array<IRNode>, styles: Array<string> = []): string {
   const ctx: Ctx = { lines: [], counter: 0 };
   const roots: Array<string> = [];
+
+  // <style> blocks mount first: emit one mountStyle(gui, css) per block at the top
+  // of the body, before any node is created. Instance-level insertion + scope-bound
+  // teardown live in the runtime helper; here we only pin an escaped string literal.
+  for (const css of styles) {
+    ctx.lines.push(`mountStyle(gui, ${JSON.stringify(css)});`);
+  }
 
   for (const node of nodes) {
     if (node.kind === "if") {
@@ -138,6 +145,20 @@ function genAttr(
       );
     } else {
       ctx.lines.push(`${target}.${method}(${JSON.stringify(key)}, ${value});`);
+    }
+    return;
+  }
+
+  // Inline `style`: NOT a one-arg element setter (ark elements have no cssText
+  // sink — `setCSS` is a <style>-element method). It routes to the setStyle
+  // runtime helper, which fans the value out over `element.style`'s per-property
+  // allowlist proxy. Static → one call with the CSS-string literal; dynamic →
+  // wrapped in a renderEffect like any other bind (the expr may be an object).
+  if (lower === "style") {
+    if (attr.dynamic) {
+      ctx.lines.push(`renderEffect(() => setStyle(${target}, ${rewriteExpression(attr.value)}));`);
+    } else {
+      ctx.lines.push(`setStyle(${target}, ${JSON.stringify(attr.value)});`);
     }
     return;
   }

@@ -63,11 +63,19 @@ const tag = signal("");            // .trim
 const draft = signal("");          // .lazy
 </script>
 
+<style>
+.heh {
+  background-color: green;
+}
+</style>
+
 <template>
   <TreeView />
 
-  <button @click="inc">{{ count }}</button>
-  <button @click="count++">inline ++</button>
+  <button :style="{
+    backgroundColor: 'red'
+  }" @click="inc">{{ count }}</button>
+  <button class="heh" @click="count++">inline ++</button>
 
   <!-- slice 6: child component with static + dynamic (reactive) props -->
   <Greeting name="world" :count="count" />

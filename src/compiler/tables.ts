@@ -56,10 +56,13 @@ export const FORMATTING_TAGS = new Set<string>([
 // `setData(key, value)` / `setAria(key, value)` and are special-cased by prefix
 // in codegen. Every setter below is one-arg.
 export const ATTR_SETTERS: Record<string, string> = {
-  // Common — on SafeElement, valid on every element.
+  // Common — on SafeElement, valid on every element. `style` is NOT here: it is
+  // not a one-arg setter (elements have no cssText sink; `setCSS` belongs to a
+  // <style> element). codegen special-cases `style`/`:style` to the setStyle
+  // runtime helper, which writes element.style's per-property allowlist proxy.
   class: "setClass", id: "setId", title: "setTitle", role: "setRole",
   tabindex: "setTabIndex", hidden: "setHidden", lang: "setLang", dir: "setDir",
-  spellcheck: "setSpellcheck", style: "setCSS",
+  spellcheck: "setSpellcheck",
 
   // Per-element (flat-merged; where an attr name recurs across elements it maps
   // to the same setter, so there is no conflict — one entry each).

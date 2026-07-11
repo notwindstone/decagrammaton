@@ -1,4 +1,4 @@
-import type { SafeElement, SafeTextNode, EventHandler, EventCleanup } from "ark-of-atrahasis";
+import type { SafeElement, SafeTextNode, SafeDocument, EventHandler, EventCleanup } from "ark-of-atrahasis";
 import {
   watchEffect,
   signal,
@@ -51,6 +51,89 @@ export function on(element: SafeElement, event: string, handler: EventHandler): 
 // Set a raw text node's content, coercing nullish to empty string.
 export function setText(node: SafeTextNode, value: unknown): void {
   node.setText(value == null ? "" : String(value));
+}
+
+// Mount a `<style>` block's CSS. ark's createStyle() appends a fresh <style> to
+// document.head; setCSS writes its textContent (ark's own allowlist drops any
+// `url(...)` rule). Insertion is INSTANCE-LEVEL: mountStyle is emitted at the top
+// of render(), so it runs once per component instance / per v-for row, and
+// registers onDispose(remove) so the <style> is torn down when the owning scope
+// disposes (render() always runs inside runWithScope). N live instances therefore
+// insert the CSS N times — an accepted tradeoff for this slice (no dedup).
+export function mountStyle(gui: SafeDocument, css: string): void {
+  const sheet = gui.createStyle();
+  sheet.setCSS(css);
+  onDispose(() => sheet.remove());
+}
+
+// Inline `style` binding (both static `style="color: red"` and dynamic
+// `:style="{ color }"`). ark elements have NO cssText sink — `setCSS` lives on
+// SafeStyleSheet (the <style> element), not on a SafeElement. Instead every
+// element exposes `element.style`, a per-property allowlist proxy
+// (Record<string,string>): assigning `style[prop] = val` sets that one property
+// if it is whitelisted (and not a url()), else silently no-ops. So we normalise
+// the bound value to individual property writes rather than one string set.
+//
+// Vue's :style value shapes are supported: a CSS string, a property object, an
+// array of either (merged left-to-right), or nullish (no-op). An unknown or
+// blocked property is dropped by ark's proxy — whitelist-by-construction, same
+// posture as an unmapped attribute.
+//
+// NOTE: a re-run (dynamic binding) writes the new value's properties but does NOT
+// clear properties that were present last run and absent now — so a binding whose
+// KEY SET changes across renders (`cond ? {color} : {fontSize}`) can leave a stale
+// property. Values changing under a fixed key set update correctly. Fuller
+// prev/next diffing is deferred.
+export function setStyle(element: SafeElement, value: unknown): void {
+  applyStyle(element.style, value);
+}
+
+function applyStyle(style: Record<string, string>, value: unknown): void {
+  if (value == null) return;
+  if (typeof value === "string") {
+    for (const decl of value.split(";")) {
+      const colon = decl.indexOf(":");
+      if (colon === -1) continue;
+      const prop = decl.slice(0, colon).trim();
+      const val = decl.slice(colon + 1).trim();
+      if (prop) setStyleProp(style, prop, val);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) applyStyle(style, item);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      const v = (value as Record<string, unknown>)[key];
+      if (v != null) setStyleProp(style, key, String(v));
+    }
+  }
+}
+
+// Assign one property through ark's allowlist proxy. A disallowed / url() prop
+// makes the proxy's set-trap return false; under an ESM strict-mode module a
+// plain `style[prop] = v` on a falsy trap THROWS — so route via Reflect.set,
+// which surfaces the rejection as a return value we can simply ignore. This is
+// the "unknown prop is dropped, not fatal" posture (mirrors an unmapped attr).
+//
+// The name is camelised first: ark writes `realEl.style[prop] = v` by BRACKET
+// access, and a real CSSStyleDeclaration only honours bracket assignment for the
+// camelCase spelling (`backgroundColor`), silently ignoring kebab
+// (`background-color`). Kebab comes from string styles (`"background-color: …"`);
+// object styles already use camel. ark's allowlist carries both spellings, so
+// the camelised name still passes its check.
+function setStyleProp(style: Record<string, string>, prop: string, value: string): void {
+  Reflect.set(style, camelize(prop), value);
+}
+
+// `background-color` -> `backgroundColor`. A leading `-` (custom property or
+// vendor prefix like `--foo`) is left as-is — it is not in ark's allowlist and
+// will be dropped, so there is nothing to normalise.
+function camelize(prop: string): string {
+  if (prop.startsWith("-")) return prop;
+  return prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 // v-model `.number` coercion. Mirrors Vue's `looseToNumber`: parse the string;
