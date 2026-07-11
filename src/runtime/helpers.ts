@@ -11,6 +11,7 @@ import {
   type Scope,
 } from "../reactivity.ts";
 import { EVENT_METHODS } from "./event-methods.ts";
+import { getCurrentInstance, runWithInstance, type ComponentInstance } from "./instance.ts";
 
 // The runtime helpers that codegen output calls. Imported by generated render
 // modules from "decagrammaton/runtime".
@@ -106,6 +107,11 @@ function pickBranch(branches: Array<IfBranch>): number {
 // disposed by the component scope's own teardown — no manual onDispose needed.
 export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<IfBranch>): void {
   const parentScope = getCurrentScope();
+  // Capture the owning instance NOW (createIf runs during the component's render,
+  // so currentInstance is the owner). The branch factory runs REACTIVELY later,
+  // outside the mount bracket — a createComponent inside the branch must re-see
+  // this instance to parent onto it and resolve inject(). Mirrors parentScope.
+  const parentInstance = getCurrentInstance();
   let active: { index: number; scope: Scope; nodes: Array<SafeNode> } | null = null;
 
   renderEffect(() => {
@@ -121,7 +127,9 @@ export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<
     if (index === -1) return;
 
     const branchScope = createScope(parentScope);
-    const nodes = runWithScope(branchScope, () => branches[index].factory());
+    const nodes = runWithScope(branchScope, () =>
+      runWithInstance(parentInstance, () => branches[index].factory()),
+    );
     for (const node of nodes) parent.insertBefore(node, anchor);
     active = { index, scope: branchScope, nodes };
   });
@@ -278,6 +286,7 @@ function rowContext(
 function createRow(
   config: ForConfig,
   parentScope: Scope | undefined,
+  parentInstance: ComponentInstance | null,
   item: unknown,
   keyVal: unknown,
   indexVal: unknown,
@@ -288,7 +297,12 @@ function createRow(
 
   const scope = createScope(parentScope);
   const proxy = rowContext(config.ctx, config.aliases, itemSig, keySig, indexSig);
-  const nodes = runWithScope(scope, () => config.factory(proxy));
+  // Re-establish the owning instance around the factory (same reason as createIf):
+  // a createComponent inside a v-for row runs reactively, outside the mount
+  // bracket, and must parent onto the list's owning instance for inject() to work.
+  const nodes = runWithScope(scope, () =>
+    runWithInstance(parentInstance, () => config.factory(proxy)),
+  );
 
   return { nodes, scope, key: undefined, itemSig, keySig, indexSig };
 }
@@ -334,6 +348,7 @@ function normalizeValues(source: unknown): Array<unknown> {
 // handed in explicitly (ark has no parentNode, so we never read ambient state).
 export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConfig): void {
   const parentScope = getCurrentScope();
+  const parentInstance = getCurrentInstance();
   const getKey = config.key;
   let oldBlocks: Array<Row> = [];
   let mounted = false;
@@ -369,7 +384,7 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
     if (!mounted || oldLen === 0) {
       mounted = true;
       for (let i = 0; i < newLen; i++) {
-        const row = createRow(config, parentScope, values[i], i, undefined);
+        const row = createRow(config, parentScope, parentInstance, values[i], i, undefined);
         if (newKeys) row.key = newKeys[i];
         newBlocks[i] = row;
         insertRow(parent, row, anchor);
@@ -394,7 +409,7 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
         updateRow(row, values[i], i, undefined);
       }
       for (let i = oldLen; i < newLen; i++) {
-        const row = createRow(config, parentScope, values[i], i, undefined);
+        const row = createRow(config, parentScope, parentInstance, values[i], i, undefined);
         newBlocks[i] = row;
         insertRow(parent, row, anchor);
       }
@@ -473,7 +488,7 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
       if ("row" in oper) {
         insertRow(parent, oper.row, ref);
       } else {
-        const row = createRow(config, parentScope, oper.item, index, undefined);
+        const row = createRow(config, parentScope, parentInstance, oper.item, index, undefined);
         row.key = oper.key;
         newBlocks[index] = row;
         insertRow(parent, row, ref);

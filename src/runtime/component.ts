@@ -4,7 +4,7 @@ import { createContext, createProps, createIf, isRootIf, createFor, isRootFor } 
 import {
   createInstance,
   getCurrentInstance,
-  setCurrentInstance,
+  runWithInstance,
   type ComponentInstance,
 } from "./instance.ts";
 
@@ -43,9 +43,7 @@ export function createApp(root: ComponentModule): AppInstance {
       const instance: ComponentInstance = createInstance(null);
 
       runWithScope(scope, () => {
-        const previous = getCurrentInstance();
-        setCurrentInstance(instance);
-        try {
+        runWithInstance(instance, () => {
           const setupResult = root.setup({}, { expose: () => {} });
           const ctx = createContext(setupResult);
           const nodes = root.render(ctx, gui);
@@ -69,9 +67,7 @@ export function createApp(root: ComponentModule): AppInstance {
               container.appendChild(node as SafeElement);
             }
           }
-        } finally {
-          setCurrentInstance(previous);
-        }
+        });
       });
 
       return () => scope.dispose();
@@ -117,9 +113,7 @@ export function createComponent(
   const instance: ComponentInstance = createInstance(parentInstance);
 
   return runWithScope(scope, () => {
-    const previous = getCurrentInstance();
-    setCurrentInstance(instance);
-    try {
+    return runWithInstance(instance, () => {
       const setupResult = module.setup(props, { expose: () => {} });
       const ctx = createContext(setupResult, props);
       const nodes = module.render(ctx, gui);
@@ -137,8 +131,6 @@ export function createComponent(
         );
       }
       return root as SafeElement;
-    } finally {
-      setCurrentInstance(previous);
-    }
+    });
   });
 }

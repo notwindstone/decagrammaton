@@ -27,6 +27,23 @@ export function setCurrentInstance(instance: ComponentInstance | null): void {
   currentInstance = instance;
 }
 
+// Run `fn` with `instance` as the ambient currentInstance, restoring the previous
+// value in a finally. The instance analog of sigrea's runWithScope. Used by
+// createIf/createFor: their factories run REACTIVELY (later, outside the original
+// mount bracket), so a `createComponent` inside a v-if branch would otherwise see
+// currentInstance === null and parent onto nothing — breaking inject for any
+// component (re)mounted by a directive after the initial render. The directive
+// captures its owning instance at creation time and re-establishes it here.
+export function runWithInstance<T>(instance: ComponentInstance | null, fn: () => T): T {
+  const previous = currentInstance;
+  currentInstance = instance;
+  try {
+    return fn();
+  } finally {
+    currentInstance = previous;
+  }
+}
+
 // Create an instance seeded from its parent per Vue's copy-on-first-write rule:
 // `provides` starts as a SHARED reference to the parent's provides (root gets a
 // fresh null-prototype object). No allocation happens until this instance calls
