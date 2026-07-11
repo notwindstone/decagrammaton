@@ -10,7 +10,7 @@ import {
   type WatchHandle,
   type Scope,
 } from "../reactivity.ts";
-import { EVENT_METHODS } from "../compiler/tables.ts";
+import { EVENT_METHODS } from "./event-methods.ts";
 
 // The runtime helpers that codegen output calls. Imported by generated render
 // modules from "decagrammaton/runtime".
@@ -178,8 +178,23 @@ export function createContext(
 export function createProps(getters: Record<string, () => unknown>): Record<string, unknown> {
   return new Proxy(getters, {
     get(target, key: string) {
+      // Own keys only. Reflect.get would walk the prototype, so `props.valueOf`
+      // etc. would find an Object.prototype method — a function — and the branch
+      // below would CALL it, returning junk (`"[object Undefined]"`) or throwing
+      // (valueOf runs with the wrong `this`). A key with no own getter is simply
+      // an absent prop → undefined (Vue's semantics).
+      if (!Object.prototype.hasOwnProperty.call(target, key)) return undefined;
       const getter = Reflect.get(target, key);
       return typeof getter === "function" ? getter() : undefined;
+    },
+    // Props are one-way (parent owns them). Writing `props.x = v` would clobber
+    // the getter, and every later read would then hit the non-function branch
+    // above and silently return undefined. Fail loud instead of poisoning the
+    // prop — Vue makes props read-only for the same reason.
+    set(_target, key: string) {
+      throw new Error(
+        `Cannot assign to prop "${key}": props are read-only (they belong to the parent).`,
+      );
     },
   });
 }

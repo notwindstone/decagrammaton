@@ -91,16 +91,8 @@ export const ATTR_SETTERS: Record<string, string> = {
   open: "setOpen",
 };
 
-// DOM event name -> Ark element `on*` method.
-export const EVENT_METHODS: Record<string, string> = {
-  click: "onClick", dblclick: "onDblClick",
-  mousedown: "onMouseDown", mouseup: "onMouseUp",
-  mouseenter: "onMouseEnter", mouseleave: "onMouseLeave", mousemove: "onMouseMove",
-  pointerdown: "onPointerDown", pointerup: "onPointerUp", pointermove: "onPointerMove",
-  contextmenu: "onContextMenu",
-  keydown: "onKeyDown", keyup: "onKeyUp",
-  focus: "onFocus", blur: "onBlur",
-  touchstart: "onTouchStart", touchend: "onTouchEnd", touchmove: "onTouchMove",
-  scroll: "onScroll",
-  change: "onChange", input: "onInput",
-};
+// EVENT_METHODS moved to ../runtime/event-methods.ts — it is the runtime's own
+// event allowlist (re-checked by `on()` at runtime), so it lives with the
+// runtime to keep the shipped runtime bundle from depending on compiler code.
+// Codegen imports it from there for its build-time pre-check.
+export { EVENT_METHODS } from "../runtime/event-methods.ts";
