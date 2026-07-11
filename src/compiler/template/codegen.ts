@@ -1,6 +1,6 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS, ATTR_SETTERS } from "../tables.ts";
-import { rewriteExpression, rewriteHandler, rewriteModelTarget } from "./expression.ts";
+import { rewriteExpression, rewriteHandler, rewriteModelTarget, forValueLocals } from "./expression.ts";
 import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
@@ -300,7 +300,7 @@ function genForConfig(node: IRFor, ctx: Ctx): string {
   const source = `() => ${rewriteExpression(node.source)}`;
 
   const aliases =
-    `{ value: ${JSON.stringify(node.valueAlias)}, ` +
+    `{ value: ${genValueBinding(node.valueBinding)}, ` +
     `key: ${node.keyAlias === null ? "null" : JSON.stringify(node.keyAlias)}, ` +
     `index: ${node.indexAlias === null ? "null" : JSON.stringify(node.indexAlias)} }`;
 
@@ -311,6 +311,19 @@ function genForConfig(node: IRFor, ctx: Ctx): string {
     `{ ctx: _ctx, source: ${source}, aliases: ${aliases}, ` +
     `factory: ${factory}, key: ${keyFn} }`
   );
+}
+
+// The `value` alias descriptor handed to the runtime row proxy. A plain
+// identifier stays a string (`"item"`) — the proxy exposes that one name. A
+// destructuring pattern becomes `{ destructure: [{ local, key }, …] }` so the
+// proxy exposes each local as a read of the matching item property/index
+// (`{ name, age }` → name reads item.name; `[a, b]` → a reads item[0]).
+function genValueBinding(binding: IRFor["valueBinding"]): string {
+  if (binding.kind === "identifier") return JSON.stringify(binding.name);
+  const entries = binding.entries
+    .map((e) => `{ local: ${JSON.stringify(e.local)}, key: ${JSON.stringify(e.key)} }`)
+    .join(", ");
+  return `{ destructure: [${entries}] }`;
 }
 
 // A row factory builds one row's nodes with its own private line buffer (same
@@ -339,11 +352,15 @@ function genRowFactory(children: Array<IRNode>, ctx: Ctx): string {
 // values (called during the diff, not tracked), so the aliases are seeded as
 // locals and stay bare — `item.id` becomes `item.id`, NOT `_ctx.item.id`. Null
 // when the list is unkeyed (positional reconcile).
+//
+// The value param is the raw alias TEXT (`item` or a pattern like `{ name }`), so
+// a destructured key (`({ id }) => id`) binds its locals via native JS
+// destructuring in the param list; every bound local is seeded so it stays bare.
 function genKeyFn(node: IRFor): string {
   if (node.keyExpr === null) return "null";
 
   const params: Array<string> = [node.valueAlias];
-  const locals = new Set<string>([node.valueAlias]);
+  const locals = new Set<string>(forValueLocals(node.valueBinding));
   if (node.keyAlias !== null) { params.push(node.keyAlias); locals.add(node.keyAlias); }
   if (node.indexAlias !== null) { params.push(node.indexAlias); locals.add(node.indexAlias); }
 

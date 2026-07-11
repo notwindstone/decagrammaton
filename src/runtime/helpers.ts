@@ -332,10 +332,17 @@ export function createProps(getters: Record<string, () => unknown>): Record<stri
 // directly. No LIS, no VDOM. Explicit-tree throughout — every row node comes from
 // a whitelisted ark creator emitted by codegen.
 
-// The loop aliases from `v-for="(value, key, index) in source"`. `value` is
-// always present; `key`/`index` are null when the template omits them.
+// The loop aliases from `v-for="(value, key, index) in source"`. `key`/`index`
+// are null when the template omits them. `value` is either a plain identifier
+// name (`"item"`) or a destructuring descriptor (`{ destructure: [{ local, key }] }`)
+// lowered from `{ name, age }` / `[a, b]` — each `local` is a row-scoped name that
+// reads the item's `key` property/index.
+export interface ForDestructure {
+  destructure: Array<{ local: string; key: string | number }>;
+}
+
 export interface ForAliases {
-  value: string;
+  value: string | ForDestructure;
   key: string | null;
   index: string | null;
 }
@@ -372,6 +379,12 @@ interface Row {
 // unwraps signals). This is why the row body prefixer stays unchanged — the
 // generated `_ctx.item` routes here to itemSig, `_ctx.count` falls through to the
 // component. Only aliases that were actually declared (non-null) intercept.
+//
+// A destructured value alias (`{ name, age } in users`) has no single item name:
+// each destructured `local` reads a property/index off the current item instead.
+// Reading `itemSig.value` inside the trap keeps the row reactive — a reused row
+// writes its itemSig and every destructured read re-runs. Writing a destructured
+// local is rejected (Vue's destructured aliases are read-only bindings).
 function rowContext(
   outer: Record<string, unknown>,
   aliases: ForAliases,
@@ -379,15 +392,38 @@ function rowContext(
   keySig: ValueSignal | null,
   indexSig: ValueSignal | null,
 ): Record<string, unknown> {
+  const valueAlias = aliases.value;
+  const destructure = typeof valueAlias === "object" ? valueAlias.destructure : null;
+  // Map each destructured local name → the item key it reads, for O(1) lookup.
+  const localToKey = destructure
+    ? new Map(destructure.map((e) => [e.local, e.key] as const))
+    : null;
+
   return new Proxy(outer, {
     get(target, key: string) {
-      if (key === aliases.value) return itemSig.value;
+      if (localToKey) {
+        if (localToKey.has(key)) {
+          const item = itemSig.value;
+          return item == null ? undefined : (item as Record<string | number, unknown>)[localToKey.get(key)!];
+        }
+      } else if (key === valueAlias) {
+        return itemSig.value;
+      }
       if (keySig && key === aliases.key) return keySig.value;
       if (indexSig && key === aliases.index) return indexSig.value;
       return Reflect.get(target, key);
     },
     set(target, key: string, incoming) {
-      if (key === aliases.value) { itemSig.value = incoming; return true; }
+      if (localToKey) {
+        if (localToKey.has(key)) {
+          throw new Error(
+            `Cannot assign to destructured v-for alias "${key}" — destructured row bindings are read-only.`,
+          );
+        }
+      } else if (key === valueAlias) {
+        itemSig.value = incoming;
+        return true;
+      }
       if (keySig && key === aliases.key) { keySig.value = incoming; return true; }
       if (indexSig && key === aliases.index) { indexSig.value = incoming; return true; }
       return Reflect.set(target, key, incoming);

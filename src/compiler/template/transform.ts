@@ -7,6 +7,7 @@ import {
   NodeTypes,
 } from "@vue/compiler-core";
 import { DecaCompileError } from "../errors.ts";
+import { parseForValueAlias } from "./expression.ts";
 import type { IRNode, IRElement, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
 
 // baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
@@ -180,6 +181,7 @@ function transformFor(node: ElementNode, parsed: ForParseResultLike): IRFor {
   return {
     kind: "for",
     source: parsed.source.content,
+    valueBinding: parseForValueAlias(value),
     valueAlias: value,
     keyAlias: parsed.key?.content ?? null,
     indexAlias: parsed.index?.content ?? null,

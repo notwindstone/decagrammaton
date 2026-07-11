@@ -10,6 +10,8 @@
 // (static), and Interpolation ({{ expr }}). v-if / v-for / :attr node kinds are
 // added by their own slices.
 
+import type { ForValueBinding } from "./expression.ts";
+
 export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor | IRComponent;
 
 export interface IRElement {
@@ -88,10 +90,15 @@ export interface IRFor {
   // The list expression, e.g. "items" in `v-for="item in items"`. Prefixed
   // against _ctx at codegen (it reads component state, not a row local).
   source: string;
-  // Row aliases from forParseResult: `(value, key, index)`. `value` is always
-  // present (`item`); `keyAlias`/`indexAlias` are null when the template omits
-  // them. These are the row-scoped LOCALS — inside a row, `item` resolves to the
-  // current row's value, NOT `_ctx.item`.
+  // The value alias binding from forParseResult's LHS: either a plain identifier
+  // (`item`) or a destructuring pattern (`{ name, age }`, `[a, b]`). Inside a row,
+  // its bound name(s) resolve to the current row's value — an identifier to the
+  // whole item, a destructured local to the matching item property/index — NOT to
+  // `_ctx.*`. Parsed by parseForValueAlias.
+  valueBinding: ForValueBinding;
+  // The raw LHS text as written (`item`, `{ name, age }`, `[a, b]`). Kept verbatim
+  // for the `:key` function's first param, where native JS destructuring binds the
+  // row locals directly (`({ name }, i) => name` needs the pattern, not a name).
   valueAlias: string;
   keyAlias: string | null;
   indexAlias: string | null;

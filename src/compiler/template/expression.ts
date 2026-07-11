@@ -193,6 +193,98 @@ export function rewriteExpression(
   return prefix(trimmed, new Set(locals));
 }
 
+// A v-for value alias, parsed from the `LHS` of `LHS in source`. Either a plain
+// identifier (`item`) or a destructuring pattern (`{ name, age }`, `[a, b]`).
+// `entries` maps each bound row-local name to the item property/index it reads.
+export type ForValueBinding =
+  | { kind: "identifier"; name: string }
+  | { kind: "destructure"; entries: Array<{ local: string; key: string | number }> };
+
+// Parse a v-for value alias into its bound locals. A destructuring pattern is
+// lowered to `{ local, key }` entries so the runtime row proxy can expose each
+// name (`{ name, age }` → name reads item.name, age reads item.age; `{ n: x }` →
+// x reads item.n; `[a, b]` → a reads item[0], b reads item[1]).
+//
+// Only the flat shapes are supported — a default (`{ a = 1 }`), rest (`{ ...r }`),
+// nested pattern (`{ a: { b } }`), or computed key throws, matching this file's
+// fail-loud stance elsewhere (statement bodies, destructuring params/assignments).
+// The alias is parsed as an arrow PARAM so acorn yields a real binding Pattern.
+export function parseForValueAlias(alias: string): ForValueBinding {
+  const trimmed = alias.trim();
+
+  let node: AcornNode;
+  try {
+    node = parseExpressionAt(`(${trimmed}) => 0`, 0, { ecmaVersion: "latest" });
+  } catch (error) {
+    throw new DecaCompileError(
+      `Could not parse v-for alias ${JSON.stringify(trimmed)}: ${(error as Error).message}`,
+    );
+  }
+
+  const param = (node as unknown as { params: Array<AcornNode> }).params[0] as
+    | (AcornNode & { type: string })
+    | undefined;
+  if (!param) {
+    throw new DecaCompileError(`Empty v-for alias ${JSON.stringify(trimmed)}.`);
+  }
+
+  if (param.type === "Identifier") {
+    return { kind: "identifier", name: (param as unknown as { name: string }).name };
+  }
+
+  if (param.type === "ObjectPattern") {
+    const props = (param as unknown as { properties: Array<AcornNode & { type: string }> }).properties;
+    const entries = props.map((prop) => {
+      const p = prop as unknown as {
+        type: string;
+        computed: boolean;
+        key: { type: string; name?: string; value?: unknown };
+        value: { type: string; name?: string };
+      };
+      if (p.type === "RestElement") {
+        throw new DecaCompileError(`Rest element in v-for destructuring ${JSON.stringify(trimmed)} is not supported yet.`);
+      }
+      if (p.computed) {
+        throw new DecaCompileError(`Computed key in v-for destructuring ${JSON.stringify(trimmed)} is not supported.`);
+      }
+      if (p.value.type !== "Identifier") {
+        throw new DecaCompileError(
+          `Nested or default v-for destructuring ${JSON.stringify(trimmed)} is not supported yet (use flat \`{ a, b }\`).`,
+        );
+      }
+      const key = p.key.type === "Identifier" ? p.key.name! : String(p.key.value);
+      return { local: p.value.name!, key };
+    });
+    return { kind: "destructure", entries };
+  }
+
+  if (param.type === "ArrayPattern") {
+    const elements = (param as unknown as { elements: Array<(AcornNode & { type: string }) | null> }).elements;
+    const entries: Array<{ local: string; key: number }> = [];
+    elements.forEach((element, index) => {
+      if (element === null) return; // an array hole (`[, b]`) binds nothing
+      if (element.type !== "Identifier") {
+        throw new DecaCompileError(
+          `Nested, default, or rest v-for array destructuring ${JSON.stringify(trimmed)} is not supported yet.`,
+        );
+      }
+      entries.push({ local: (element as unknown as { name: string }).name, key: index });
+    });
+    return { kind: "destructure", entries };
+  }
+
+  throw new DecaCompileError(
+    `Unsupported v-for alias ${JSON.stringify(trimmed)} (expected an identifier or a flat \`{ }\` / \`[ ]\` pattern).`,
+  );
+}
+
+// The row-local names a value alias binds — the identifier itself, or every
+// destructured local. Used to seed the `:key` function's params as locals so
+// they stay bare (not prefixed to `_ctx.x`).
+export function forValueLocals(binding: ForValueBinding): Array<string> {
+  return binding.kind === "identifier" ? [binding.name] : binding.entries.map((e) => e.local);
+}
+
 // Rewrite an `@event` handler, matching Vue's two handler shapes:
 //   - a method/function reference (`inc`, `obj.method`, `() => count++`) is
 //     passed through prefixed — it IS the handler.

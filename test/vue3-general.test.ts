@@ -453,7 +453,7 @@ describe("Vue 3 template usages", () => {
     const last = signal("Smith");
 
     const { app } = mountTemplate(
-      `<div>{{ \`${first} ${last}\` }}</div>`,
+      `<div>{{ \`\${first} \${last}\` }}</div>`,
       { first, last }
   );
 
