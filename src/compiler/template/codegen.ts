@@ -473,13 +473,25 @@ function genComponent(node: IRComponent, ctx: Ctx): string {
   return name;
 }
 
+// Props are emitted as getters keyed by the CAMELISED attribute name:
+// `attribute-name` / `:attribute-name` -> `attributeName`. The child can only ever
+// read a prop through a camelCase identifier (codegen emits `_ctx.attributeName`;
+// `_ctx.attribute-name` is not valid JS), so a kebab key would never be found and
+// the prop would read `undefined`. Vue's compiler camelises prop keys for the same
+// reason. A name with no dash is returned unchanged, so `name`/`count` are untouched.
 function genProps(props: IRComponent["props"]): string {
   if (props.length === 0) return "{}";
   const parts = props.map((p) => {
     const value = p.dynamic ? rewriteExpression(p.value) : JSON.stringify(p.value);
-    return `${JSON.stringify(p.name)}: () => ${value}`;
+    return `${JSON.stringify(camelizeProp(p.name))}: () => ${value}`;
   });
   return `{ ${parts.join(", ")} }`;
+}
+
+// `attribute-name` -> `attributeName`. Compile-time twin of the runtime `camelize`
+// used for :style props; kept local so codegen has no runtime import.
+function camelizeProp(name: string): string {
+  return name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 function genText(node: IRText, ctx: Ctx): string {

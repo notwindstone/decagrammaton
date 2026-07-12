@@ -131,6 +131,16 @@ describe("structural directive codegen shape (slices 3, 4, 6)", () => {
     expect(src).toContain(`"name": () => "w"`);
     expect(src).toContain(`"count": () => _ctx.c`);
   });
+
+  test("kebab-case prop names camelise to match the child's camelCase binding", () => {
+    // The child reads `_ctx.attributeName` (kebab is not a valid JS identifier), so
+    // the emitted prop KEY must be camelised or the lookup misses -> undefined.
+    const src = renderSource(`<Child attribute-name="w" :other-prop="c" />`);
+    expect(src).toContain(`"attributeName": () => "w"`);
+    expect(src).toContain(`"otherProp": () => _ctx.c`);
+    // dashless names are left exactly as-is.
+    expect(renderSource(`<Child count="1" />`)).toContain(`"count": () => "1"`);
+  });
 });
 
 describe("component fail-loud (slice 6 boundaries)", () => {
