@@ -4,64 +4,68 @@
 
 Plain HTML attributes are passed through as-is:
 
-```html
+```vue
 <input type="text" placeholder="Enter text" disabled />
-<div class="container" id="main" />
+<div class="container" id="main"></div>
 ```
 
-Boolean attributes (no value) are treated as `true`:
+A valueless attribute (`disabled`) is treated as present/`true`.
 
-```html
-<input disabled />
-<!-- equivalent to disabled="" -->
+::: warning Whitelist by construction
+Decagrammaton compiles to the [Ark of Atrahasis](https://github.com/notwindstone/ark-of-atrahasis) safe DOM, which has **no** generic `setAttribute`. Every attribute maps to a specific Ark setter from an internal table. An attribute with no entry has nothing to call, so **the build fails** with a `DecaCompileError` rather than silently emitting it. The same is true for tags: an unknown tag (e.g. `<marquee>`) has no Ark creator and fails the build.
+:::
+
+## Bound Attributes `:attr="expression"`
+
+Prefix an attribute with `:` (shorthand for `v-bind:`) to evaluate its value as a JavaScript expression:
+
+```vue
+<div :class="isActive ? 'active' : 'inactive'"></div>
+<input :value="name" />
+<button :disabled="isLoading"></button>
 ```
 
-## Expression Attributes `={expression}`
+Bound attributes are **reactive** — when a signal or computed read inside the expression changes, the attribute is updated (each binding is wrapped in a render effect).
 
-Wrap an attribute value in `{...}` to evaluate it as a JavaScript expression:
-
-```html
-<div class={isActive ? 'active' : 'inactive'} />
-<input value={name.value} />
-<button disabled={isLoading.value} />
-```
-
-Expression attributes are **reactive** — when any signal or computed accessed inside the expression changes, the attribute is automatically updated.
+Dynamic attribute *names* (`:[attrName]="x"`) are **not** supported — there'd be no attribute name to whitelist at build time, so they throw.
 
 ### Dynamic `class`
 
-A common pattern is using template literals for conditional classes:
+`:class` accepts Vue's string / array / object shapes, and a static `class` is **merged** with a dynamic `:class`:
 
-```html
-<button
-  class={`px-4 py-2 rounded ${isActive.value ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}
-/>
+```vue
+<div class="btn" :class="{ active: isActive, disabled: isDisabled }"></div>
+<div :class="[base, isActive ? 'on' : 'off']"></div>
 ```
+
+`class="btn" :class="{ active: true }"` produces `"btn active"`. Only one `:class` binding per element is allowed — combine multiple into a single array/object.
 
 ### Dynamic `style`
 
-Pass an object to `style` to set individual CSS properties:
+`:style` accepts a string, an object (camelCase CSS keys), or an array of those:
 
-```html
-<div style={{ backgroundColor: "red", width: `${progress.value}%` }} />
+```vue
+<div :style="{ backgroundColor: 'red', width: `${progress}%` }"></div>
 ```
 
-The object keys are CSS property names (camelCase), and the values are strings. Each property is applied reactively — only changed properties are updated.
+Each property is applied through Ark's per-property style proxy. A plain `style="..."` string attribute is applied statically.
 
-::: tip
-Dynamic `style` with an object is the only way to set inline styles. A `style="..."` string attribute is applied as a static attribute.
+::: info
+`:style` does not diff stale keys: if an object binding drops a key entirely between renders, the previously-set property is not explicitly cleared.
 :::
 
-## Event Attributes `@event={handler}`
+## Event Handlers `@event="handler"`
 
-Prefix an attribute name with `@` to bind an event handler:
+Prefix with `@` (shorthand for `v-on:`) to bind an event handler:
 
-```html
-<button @click={handleClick}>Click me</button>
-<input @input={handleInput} @change={handleChange} />
+```vue
+<button @click="handleClick">Click me</button>
+<input @input="handleInput" @change="handleChange" />
 ```
 
-The handler receives a `SafeEvent` DTO (not a native `Event` object) when running inside a SES compartment. Available events:
+A handler may be a **method reference** (`@click="inc"`), a **member reference** (`@click="obj.method"`), an **arrow function** (`@click="() => inc()"`), or an **inline expression** (`@click="count++"`, which the compiler wraps so it runs on each event with `$event` in scope).
+
+The handler receives a `SafeEvent` DTO (not a native `Event`) when running inside a SES compartment. Available events map to whitelisted Ark `on*` methods:
 
 | Attribute      | Event       |
 |----------------|-------------|
@@ -87,30 +91,43 @@ The handler receives a `SafeEvent` DTO (not a native `Event` object) when runnin
 | `@change`      | change      |
 | `@input`       | input       |
 
-### Inline handlers
+An event with no entry throws at build time. Dynamic event names (`@[name]`) are not supported. `@event` on a **component** (child-to-parent events) is also rejected — there is no `emit`; use a callback prop instead.
 
-You can use arrow functions directly in the attribute:
+::: warning Inline handlers must be expressions
+An inline arrow handler must have an **expression** body. A block body throws:
 
-```html
-<button @click={() => count.value++}>+1</button>
-<button @click={() => removeTask(task.id)}>Remove</button>
+```vue
+<!-- ok -->
+<button @click="count++">+1</button>
+<button @click="() => remove(task.id)">Remove</button>
+
+<!-- throws: statement-body functions are not supported -->
+<button @click="() => { doA(); doB(); }">no</button>
 ```
+
+Move multi-statement logic into a method in `<script setup>` and reference it by name.
+:::
 
 ## `data-*` and `aria-*` Attributes
 
-Data and ARIA attributes are supported with their standard prefixes:
+Data and ARIA attributes are supported via Ark's two-argument `setData` / `setAria`:
 
-```html
-<div data-testid="main-container" aria-label="Main content" />
+```vue
+<div data-testid="main-container" :aria-label="label"></div>
 ```
+
+## `v-model`
+
+Two-way binding on form elements is covered by `v-model` — see the full rules in the sections below and on the [Iteration](/logic/iteration) and [Conditional Rendering](/logic/conditional-rendering) pages. It is supported on `<input>`, `<textarea>`, and single-select `<select>`, with `.lazy`, `.number`, and `.trim` modifiers. It is **not** supported on components.
 
 ## Summary
 
 | Syntax | Type | Reactive |
 |---|---|---|
 | `name="value"` | Static attribute | No |
-| `name={expression}` | Expression attribute | Yes |
-| `@event={handler}` | Event binding | N/A |
+| `:name="expression"` | Bound attribute | Yes |
+| `@event="handler"` | Event binding | N/A |
+| `v-model="target"` | Two-way form binding | Yes |
 | `name` (no value) | Boolean attribute | No |
-| `:if`, `:else-if`, `:else` | [Conditional directive](/logic/conditional-rendering) | Yes |
-| `:for`, `:key` | [Iteration directive](/logic/iteration) | Yes |
+| `v-if`, `v-else-if`, `v-else` | [Conditional directive](/logic/conditional-rendering) | Yes |
+| `v-for`, `:key` | [Iteration directive](/logic/iteration) | Yes |

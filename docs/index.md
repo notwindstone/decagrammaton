@@ -3,11 +3,11 @@ layout: home
 
 hero:
   name: "Decagrammaton"
-  text: "A UI framework that can run in Secure ECMAScript compartments"
+  text: "A UI framework for Secure ECMAScript compartments"
   tagline: Made for a Kaede Minecraft Launcher <3
   image:
     src: logo.png
-    alt: My Project Logo
+    alt: Decagrammaton Vending Machine
   actions:
     - theme: brand
       text: Get Started
@@ -18,9 +18,9 @@ hero:
 
 features:
   - title: Single-File Components
-    details: Decagrammaton is heavily inspired by the syntax of Svelte 5 and Vue 3
+    details: Decagrammaton uses Vue 3-like syntax and the <code>.vue</code> file extension
   - title: Declarative
-    details: Describe your UI in templates based on app states
+    details: The UI is described in templates based on app states
   - title: Reactive
-    details: The reactivity system is based on the lightest signal library (alien-signals)
+    details: The reactivity system is based on signals (@sigrea/core)
 ---

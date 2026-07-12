@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { createSafeDocument } from "ark-of-atrahasis";
-import { createApp, type DecaModule } from "decagrammaton";
 import { onMounted, onUnmounted, shallowRef } from "vue";
 
-const { suffix, component } = defineProps<{
+const { suffix } = defineProps<{
   "suffix"   : string;
-  "component": DecaModule;
+  // "component": DecaModule;
 }>();
 
 const cleanup = shallowRef<() => void>((): void => {});
 
 onMounted(() => {
+  return;
   const safeDocument = createSafeDocument(
     document.getElementById(`__mounting-point-${suffix}`)!,
   );

@@ -76,7 +76,7 @@ const draft = signal("");          // .lazy
 
   <button :style="{
     backgroundColor: 'red'
-  }" @click="inc">{{ count }}</button>
+  }" @click="() => count++">{{ count }}</button>
   <button class="heh" @click="count++">inline ++</button>
 
   <!-- slice 6: child component with static + dynamic (reactive) props -->

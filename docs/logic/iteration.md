@@ -1,62 +1,69 @@
 # Iteration
 
-## `:for` and `:key`
+## `v-for`
 
-Use the `:for` directive to render an element for each item in an array:
+Use `v-for` to render an element for each item in an array:
 
-```html
-<li :for={item in items.value} :key={item.id}>
-  {item.name}
+```vue
+<li v-for="item in items" :key="item.id">
+  {{ item.name }}
 </li>
 ```
 
-**`:key` is required.** It must be a unique identifier for each item, used for efficient DOM reconciliation.
+`:key` should be a stable, unique identifier for each item, used for keyed reconciliation. It is strongly recommended; when omitted, rows reconcile positionally.
 
 ## Syntax
 
-The `:for` directive uses `binding in iterable` syntax:
+`v-for` uses `alias in source` syntax:
 
-```html
-<!-- single binding -->
-<div :for={item in list.value} :key={item.id}>
-  {item.name}
-</div>
+```vue
+<!-- single alias -->
+<div v-for="item in list" :key="item.id">{{ item.name }}</div>
 
 <!-- with index -->
-<div :for={(item, index) in list.value} :key={item.id}>
-  #{index}: {item.name}
-</div>
+<div v-for="(item, index) in list" :key="item.id">#{{ index }}: {{ item.name }}</div>
 ```
 
 | Part | Description |
 |---|---|
-| `item` | Variable name bound to the current item |
-| `index` | Optional variable name bound to the current index |
-| `list.value` | The iterable expression (must be an array) |
-| `:key={item.id}` | Unique identifier expression for each item |
+| `item` | Variable bound to the current item |
+| `index` | Optional variable bound to the current index |
+| `list` | The iterable expression (must be an array) |
+| `:key="item.id"` | Unique identifier expression per item |
+
+### Destructuring the item
+
+Flat object and array destructuring in the alias are supported:
+
+```vue
+<li v-for="{ id, name } in users" :key="id">{{ name }}</li>
+<li v-for="[first, second] in pairs" :key="first">{{ first }} / {{ second }}</li>
+```
+
+Nested patterns, defaults (`{ a = 1 }`), and rest (`{ ...r }`) are **not** supported — keep it flat and fail loud.
 
 ## Full example
 
-```html
-<script lang="ts">
-  import { $signal } from "decagrammaton";
+```vue
+<script setup>
+  import { signal } from "decagrammaton";
 
-  const students = $signal([
+  const students = signal([
     { id: 1, name: "Aru", squad: "Problem Solver 68" },
     { id: 2, name: "Hina", squad: "Prefect Team" },
     { id: 3, name: "Iori", squad: "Problem Solver 68" },
   ]);
 
   function remove(id) {
-    students.value = students.value.filter(s => s.id !== id);
+    students.value = students.value.filter((s) => s.id !== id);
   }
 </script>
 
 <template>
   <div>
-    <div :for={student in students.value} :key={student.id}>
-      <span>{student.name} — {student.squad}</span>
-      <button @click={() => remove(student.id)}>Remove</button>
+    <div v-for="student in students" :key="student.id">
+      <span>{{ student.name }} — {{ student.squad }}</span>
+      <button @click="() => remove(student.id)">Remove</button>
     </div>
   </div>
 </template>
@@ -64,49 +71,41 @@ The `:for` directive uses `binding in iterable` syntax:
 
 ## How it works
 
-At runtime, `:for` uses **keyed reconciliation**:
+At runtime, `v-for` uses **keyed reconciliation** (a port of Vue Vapor's right-to-left keyed diff, minus the VDOM):
 
-1. The iterable expression is evaluated inside an `effect()`
-2. For each item, a scope is created with the binding variables (`item`, `index`)
-3. The `:key` expression is evaluated per item to produce a unique key
-4. New keys get fresh DOM nodes mounted; removed keys get their nodes cleaned up
-5. Existing keys are left in place (not re-created)
+1. The source expression is read inside a render effect.
+2. Each row gets a scope exposing the alias bindings (`item`, `index`, or destructured locals).
+3. The `:key` expression produces a unique key per row.
+4. New keys mount fresh nodes; removed keys are unmounted; existing keys keep their DOM node identity.
 
-This means:
-- **Adding** an item mounts new DOM — existing items aren't touched
-- **Removing** an item cleans up only that item's DOM
-- **Reordering** is handled by key identity
-
-::: info
-Each iterated item is wrapped in a `<div>` at runtime for DOM isolation. This is an implementation detail for keyed reconciliation.
-:::
+So **adding** an item mounts new DOM without touching existing rows, **removing** cleans up only that row, and **reordering** preserves node identity by key.
 
 ## Combining with other directives
 
-You can use `:for` on a component tag:
+`v-for` works on a component tag:
 
-```html
+```vue
 <TaskItem
-  :for={task in filteredTasks.value}
-  :key={task.id}
-  task={task}
-  onToggle={toggleTask}
-  onRemove={removeTask}
+  v-for="task in filteredTasks"
+  :key="task.id"
+  :task="task"
+  :onToggle="toggleTask"
 />
 ```
 
-You can also nest `:if` inside `:for`:
+You can nest `v-if` inside a `v-for` element:
 
-```html
-<div :for={task in tasks.value} :key={task.id}>
-  <span :if={task.done}>Done!</span>
-  <span :else>{task.text}</span>
+```vue
+<div v-for="task in tasks" :key="task.id">
+  <span v-if="task.done">Done!</span>
+  <span v-else>{{ task.text }}</span>
 </div>
 ```
 
 ## Rules
 
-- `:for` requires `:key` — the compiler throws an error without it
-- `:for` uses `binding in iterable` syntax — anything else is a parse error
-- The iterable must evaluate to an array
-- Keys should be **stable** and **unique** — avoid using the index as a key when items can be reordered or removed
+- `v-for` uses `alias in source` syntax — anything else is a parse error.
+- The source must evaluate to an array.
+- **`v-if` and `v-for` on the same element is rejected** — nest one inside the other (see [Conditional Rendering](/logic/conditional-rendering)).
+- **Each row must have a single root element or component** — a row cannot be bare text or a fragment.
+- Keys should be **stable** and **unique** — avoid the index as key when items can be reordered or removed.
