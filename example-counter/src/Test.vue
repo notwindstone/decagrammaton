@@ -51,7 +51,7 @@ function capitalize(str) {
       <tr>
         <th v-for="key in columns"
             @click="sortBy(key)"
-            :class="{ active: sortKey == key }">
+            :class="{ active: sortKey === key }">
           {{ capitalize(key) }}
           <span class="arrow" :class="sortOrders[key] > 0 ? 'asc' : 'dsc'">
           </span>

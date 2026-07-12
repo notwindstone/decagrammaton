@@ -3,6 +3,7 @@ import { compileSetup } from "./script.ts";
 import { transform } from "./template/transform.ts";
 import { generate } from "./template/codegen.ts";
 import { DecaCompileError } from "./errors.ts";
+import minify from "css-simple-minifier";
 import type { SFCDescriptor } from "@vue/compiler-sfc";
 
 // The orchestrator: `.vue` source -> a full ES module string.
@@ -43,7 +44,8 @@ export function compile(source: string, filename: string, id: string): string {
 // supported this slice: `scoped`, CSS Modules (`module`), and preprocessor langs
 // (`lang` other than css) are rejected fail-loud rather than silently dropped —
 // a template author writing `<style scoped>` must see it isn't honored, not have
-// leaking global styles. Surviving blocks map to their raw CSS content.
+// leaking global styles. Surviving blocks are minified so the bundle ships
+// compact CSS rather than the author's raw, whitespace-heavy source.
 function collectStyles(styles: SFCDescriptor["styles"]): Array<string> {
   return styles.map((block) => {
     if (block.scoped) {
@@ -55,6 +57,6 @@ function collectStyles(styles: SFCDescriptor["styles"]): Array<string> {
     if (block.lang !== undefined && block.lang !== "css") {
       throw new DecaCompileError(`<style lang="${block.lang}"> is not supported — only plain global <style> (css) in this slice.`);
     }
-    return block.content;
+    return minify(block.content);
   });
 }

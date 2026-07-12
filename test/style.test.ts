@@ -56,6 +56,15 @@ describe("<style> — compile() layer (full SFC)", () => {
     const mod = compileSFC(`<template><p>hi</p></template>`);
     expect(mod).not.toContain("mountStyle(gui,");
   });
+
+  test("whitespace-heavy CSS is minified before it reaches mountStyle", () => {
+    const mod = compileSFC(
+      `<template><p>hi</p></template>\n<style>\n  .foo,\n  .bar {\n    color: red;\n  }\n</style>`,
+    );
+    // The author's newlines/indentation are collapsed; the compact form ships.
+    expect(mod).toContain(`mountStyle(gui, ".foo,.bar{color: red;}");`);
+    expect(mod).not.toContain("\\n  .foo");
+  });
 });
 
 describe("<style> — fail-loud rejections", () => {
