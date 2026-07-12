@@ -8,7 +8,7 @@ import {
 } from "@vue/compiler-core";
 import { DecaCompileError } from "../errors.ts";
 import { parseForValueAlias } from "./expression.ts";
-import type { IRNode, IRElement, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
+import type { IRNode, IRElement, IRIf, IRFor, IRComponent, IRSlot, IRModel } from "./ir.ts";
 
 // baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
 // confirmed): `source`/`value`/`key`/`index` arrive as expression nodes, so we
@@ -237,18 +237,23 @@ function transformChild(node: TemplateChildNode): IRNode | null {
   }
 }
 
-function transformElement(node: ElementNode): IRElement | IRComponent {
+function transformElement(node: ElementNode): IRElement | IRComponent | IRSlot {
   // Component tags (tagType 1) are resolved at RUNTIME via `_ctx[tag]`, not via a
   // build-time ark creator — a component is a compiled safe module, not a leaf.
   // Routing here (the single ElementNode handler) means components compose
   // everywhere an element does: as a child, a v-if branch root, or a v-for row.
-  // Slots (2) and <template> (3) remain unsupported.
   if (node.tagType === 1) {
     return transformComponent(node);
   }
+  // A `<slot>` outlet (tagType 2) inside this component's own template. Only the
+  // DEFAULT slot is supported: a `name`/`:name` (named slot) or any `v-bind`
+  // (scoped slot) is rejected fail-loud. Its own children are the fallback.
+  if (node.tagType === 2) {
+    return transformSlot(node);
+  }
   if (node.tagType !== 0) {
     throw new DecaCompileError(
-      `Unsupported element "${node.tag}" (slots/<template> not in this slice).`,
+      `Unsupported element "${node.tag}" (<template> is not supported in this slice).`,
     );
   }
 
@@ -460,14 +465,14 @@ function buildModel(
 // v-bind), but with author casing preserved — component prop names are
 // case-sensitive. Structural directives (v-if/v-else*/v-for and the v-for `:key`)
 // are consumed by the grouping passes and skipped here, exactly as for elements.
-// Component `@events` (defineEmits) and slots are out of this slice — fail loud.
+// Component `@events` (defineEmits) are out of this slice — fail loud.
+//
+// A component's own children are its DEFAULT-slot body (`<Child>…</Child>`),
+// transformed with the parent's context and rendered at the child's `<slot>`
+// outlet. Whitespace-only children collapse to an empty list → null (no slot
+// passed). Named slots (`<template #x>` children, or a `v-slot`/`#x` directive on
+// the component) are rejected fail-loud — only the default slot this slice.
 function transformComponent(node: ElementNode): IRComponent {
-  if (node.children.length > 0) {
-    throw new DecaCompileError(
-      `Slots on <${node.tag}> are not in this slice (component children unsupported).`,
-    );
-  }
-
   const props: IRComponent["props"] = [];
 
   for (const prop of node.props) {
@@ -477,6 +482,16 @@ function transformComponent(node: ElementNode): IRComponent {
       // Consumed by the grouping / for passes before this element renders.
       if (dir.name === "if" || dir.name === "else-if" || dir.name === "else") continue;
       if (dir.name === "for") continue;
+
+      // `v-slot` / `#name` on the component element itself is a NAMED/scoped slot
+      // binding — out of this slice. (baseParse surfaces both spellings as the
+      // "slot" directive.)
+      if (dir.name === "slot") {
+        throw new DecaCompileError(
+          `v-slot / #slot on <${node.tag}> (named/scoped slots) is not supported in this slice — ` +
+            `only the default slot (plain children) is available.`,
+        );
+      }
 
       if (dir.name === "model") {
         throw new DecaCompileError(
@@ -527,7 +542,61 @@ function transformComponent(node: ElementNode): IRComponent {
     });
   }
 
-  return { kind: "component", tag: node.tag, props };
+  // A `<template>` child (tagType 3) is a named-slot binding (`<template #x>`) —
+  // reject with a slot-specific message before transformChildren hits the generic
+  // "<template> unsupported" path, so the author knows named slots are the reason.
+  for (const child of node.children) {
+    if (child.type === NodeTypes.ELEMENT && child.tagType === 3) {
+      throw new DecaCompileError(
+        `<template> slot bindings inside <${node.tag}> (named/scoped slots) are not supported ` +
+          `in this slice — only the default slot (plain children) is available.`,
+      );
+    }
+  }
+
+  // The default-slot body: null when the parent passes nothing (whitespace-only
+  // children already collapse to [] in transformChildren), so codegen omits the
+  // slots argument and existing childless `<Child />` usage is unchanged.
+  const body = transformChildren(node.children);
+  const slot = body.length > 0 ? body : null;
+
+  return { kind: "component", tag: node.tag, props, slot };
+}
+
+// Lower a `<slot>` outlet (tagType 2) into an IRSlot. Default slot only: a `name`
+// (static attribute) is a named slot, and any `v-bind` (`:item="x"`) is a scoped
+// slot — both rejected fail-loud. Every other directive on `<slot>` is likewise
+// unsupported. The outlet's own children become the fallback (shown when the
+// parent supplies no slot content).
+function transformSlot(node: ElementNode): IRSlot {
+  for (const prop of node.props) {
+    if (prop.type === NodeTypes.DIRECTIVE) {
+      const dir = prop as DirectiveNode;
+      if (dir.name === "bind") {
+        const arg = dir.arg as SimpleExpressionNode | undefined;
+        throw new DecaCompileError(
+          `Scoped slot props (:${arg?.content ?? "…"} on <slot>) are not supported in this slice — ` +
+            `only a plain <slot> / <slot></slot> outlet is available.`,
+        );
+      }
+      throw new DecaCompileError(
+        `Directive "v-${dir.name}" on <slot> is not supported in this slice.`,
+      );
+    }
+    // A static attribute on <slot> — `name="header"` is a named slot; anything
+    // else has no meaning on an outlet. Reject either way.
+    if (prop.name === "name") {
+      throw new DecaCompileError(
+        `Named slots (<slot name="${prop.value?.content ?? ""}">) are not supported in this slice — ` +
+          `only the default slot is available.`,
+      );
+    }
+    throw new DecaCompileError(
+      `Attribute "${prop.name}" on <slot> is not supported in this slice.`,
+    );
+  }
+
+  return { kind: "slot", fallback: transformChildren(node.children) };
 }
 
 function transformOn(dir: DirectiveNode, tag: string): { name: string; handler: string } {

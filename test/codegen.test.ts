@@ -148,7 +148,11 @@ describe("component fail-loud (slice 6 boundaries)", () => {
     expect(() => renderSource(`<Child @go="f" />`)).toThrow(/Component events/);
   });
 
-  test("component slots (children) are not in this slice and throw", () => {
-    expect(() => renderSource(`<Child>hi</Child>`)).toThrow(/Slots on <Child>/);
+  test("named / scoped slots are still fail-loud (only the default slot compiles)", () => {
+    // The default slot now compiles (see slots.test.ts); the named/scoped variants
+    // remain rejected. This keeps a fail-loud boundary asserted here at the codegen
+    // layer rather than leaving the removed one silently gone.
+    expect(() => renderSource(`<Child v-slot="s">hi</Child>`)).toThrow(DecaCompileError);
+    expect(() => renderSource(`<div><slot name="x"></slot></div>`)).toThrow(DecaCompileError);
   });
 });

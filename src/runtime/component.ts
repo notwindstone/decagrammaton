@@ -1,6 +1,6 @@
 import type { SafeElement, SafeDocument, SafeTextNode } from "ark-of-atrahasis";
 import { createScope, runWithScope, getCurrentScope, type Scope } from "../reactivity.ts";
-import { createContext, createProps, createIf, isRootIf, createFor, isRootFor } from "./helpers.ts";
+import { createContext, createProps, createIf, isRootIf, createFor, isRootFor, type Slots, type SlotFn } from "./helpers.ts";
 import {
   createInstance,
   getCurrentInstance,
@@ -9,10 +9,12 @@ import {
 } from "./instance.ts";
 
 // A compiled component module, as produced by the vite plugin: the setup()
-// factory plus the generated render() function.
+// factory plus the generated render() function. render() takes an optional
+// `$slots` — the parent-supplied slot factories (currently just `default`);
+// absent for the root and for any childless component.
 export interface ComponentModule {
   setup: (props: Record<string, unknown>, ctx: { expose: (e?: unknown) => void }) => Record<string, unknown>;
-  render: (ctx: Record<string, unknown>, gui: SafeDocument) => Array<unknown>;
+  render: (ctx: Record<string, unknown>, gui: SafeDocument, slots?: Slots) => Array<unknown>;
 }
 
 export interface AppInstance {
@@ -46,7 +48,7 @@ export function createApp(root: ComponentModule): AppInstance {
         runWithInstance(instance, () => {
           const setupResult = root.setup({}, { expose: () => {} });
           const ctx = createContext(setupResult);
-          const nodes = root.render(ctx, gui);
+          const nodes = root.render(ctx, gui, {});
 
           for (const node of nodes) {
             if (isRootIf(node)) {
@@ -76,7 +78,9 @@ export function createApp(root: ComponentModule): AppInstance {
 }
 
 // Mount a child component instance (slice 6). Called from a parent's generated
-// render() for every `<Child …/>` tag: `createComponent(_ctx.Child, props, gui)`.
+// render() for every `<Child …/>` tag: `createComponent(_ctx.Child, props, gui)`,
+// or `createComponent(_ctx.Child, props, gui, { default: (_parent) => {…} })` when
+// the parent passes slot content between the tags.
 //
 // Mirrors createApp.mount, with three differences: (1) the child scope is
 // parented to the CURRENT scope (getCurrentScope, active because the parent's
@@ -87,6 +91,15 @@ export function createApp(root: ComponentModule): AppInstance {
 // tracks the parent signal; (3) it RETURNS the child's root node instead of
 // appending — the parent's render splices it like any other node.
 //
+// Slots (slice 7): the parent's slot factories build content that lives in the
+// CHILD's DOM but is authored by the PARENT — so each factory is wrapped to run
+// under the parent's scope AND instance (captured here, at call time, inside the
+// parent's render bracket). That makes slot-content effects register on the parent
+// scope (disposed with the parent) and slot-content inject() resolve against the
+// parent lineage — exactly the createIf discipline, applied to slot bodies. The
+// wrapped slots are handed to the child's render(), which invokes them at its
+// `<slot>` outlets via mountSlot.
+//
 // Single-root only (architect ruling): the child's render must yield exactly one
 // node, and it must be a real node — a root-level v-if/v-for marker has no
 // container to bind into here (that is the deferred fragment machinery). Both
@@ -95,12 +108,16 @@ export function createComponent(
   module: ComponentModule,
   propGetters: Record<string, () => unknown>,
   gui: SafeDocument,
+  slots?: Slots,
 ): SafeElement {
   if (module == null || typeof module.setup !== "function" || typeof module.render !== "function") {
     throw new Error("createComponent: target is not a component (missing setup/render).");
   }
 
-  const scope: Scope = createScope(getCurrentScope());
+  // Capture the parent scope/instance BEFORE creating the child's own — slot
+  // content is parent-authored and must run under these, not the child's.
+  const parentScope = getCurrentScope();
+  const scope: Scope = createScope(parentScope);
   const props = createProps(propGetters);
 
   // The child instance parents onto whatever instance is current at call time.
@@ -112,11 +129,13 @@ export function createComponent(
   const parentInstance = getCurrentInstance();
   const instance: ComponentInstance = createInstance(parentInstance);
 
+  const wrappedSlots = slots ? wrapSlots(slots, parentScope, parentInstance) : undefined;
+
   return runWithScope(scope, () => {
     return runWithInstance(instance, () => {
       const setupResult = module.setup(props, { expose: () => {} });
       const ctx = createContext(setupResult, props);
-      const nodes = module.render(ctx, gui);
+      const nodes = module.render(ctx, gui, wrappedSlots);
 
       if (nodes.length !== 1) {
         throw new Error(
@@ -133,4 +152,32 @@ export function createComponent(
       return root as SafeElement;
     });
   });
+}
+
+// Wrap each parent-supplied slot factory so it runs under the parent's scope and
+// instance, no matter where the child later invokes it (a `<slot>` outlet nested
+// in the child's own v-if/v-for runs reactively, outside this call's brackets —
+// same hazard createIf/createFor guard against, so we re-establish both here). The
+// factory still appends into the outlet element the child hands it; only its
+// ambient scope/instance are pinned to the parent. Effects registered by the slot
+// body thus dispose with the PARENT scope, and its inject() walks the PARENT
+// lineage — correct, because the content was authored in the parent.
+function wrapSlots(
+  slots: Slots,
+  parentScope: Scope | undefined,
+  parentInstance: ComponentInstance | null,
+): Slots {
+  const wrapped: Slots = {};
+  for (const name of Object.keys(slots)) {
+    const fn: SlotFn = slots[name];
+    // parentScope is present in practice — createComponent runs inside the parent's
+    // render bracket (createApp/an ancestor set runWithScope before render). Guard
+    // the undefined case anyway (a scopeless mount) by running the factory bare
+    // under just the parent instance, mirroring createIf's own scope handling.
+    wrapped[name] = (parent: SafeElement) => {
+      const run = () => runWithInstance(parentInstance, () => fn(parent));
+      return parentScope ? runWithScope(parentScope, run) : run();
+    };
+  }
+  return wrapped;
 }

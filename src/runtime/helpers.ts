@@ -214,6 +214,28 @@ export function append(parent: SafeElement, child: SafeNode): void {
   parent.appendChild(child);
 }
 
+// A slot factory: given the outlet's parent element, build the slot's nodes and
+// append each into it. Both a parent-supplied default slot (codegen's `{ default:
+// (_parent) => {…} }`) and a `<slot>`'s own fallback share this shape, so mountSlot
+// treats them uniformly — it just picks which one to run.
+export type SlotFn = (parent: SafeElement) => void;
+export type Slots = Record<string, SlotFn>;
+
+// Render a `<slot>` outlet. If the parent supplied a default slot, run it (it was
+// wrapped by createComponent to execute under the PARENT's scope + instance, so
+// its effects and inject() resolve against the parent that authored the content).
+// Otherwise run the outlet's own `fallback` (child-authored, so it runs in the
+// child scope as-is). Either way the factory appends straight into `parent` — the
+// outlet's element const — so the slot expands to 0..N real children in place.
+export function mountSlot(parent: SafeElement, slots: Slots | undefined, fallback: SlotFn): void {
+  const provided = slots && slots.default;
+  if (provided) {
+    provided(parent);
+  } else {
+    fallback(parent);
+  }
+}
+
 // A single v-if / v-else-if / v-else branch. `condition` is null for v-else.
 // `factory` builds and returns the branch's top-level nodes; it closes over the
 // generated render's `_ctx` and `gui` lexically.

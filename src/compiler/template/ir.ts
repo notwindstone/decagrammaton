@@ -12,7 +12,7 @@
 
 import type { ForValueBinding } from "./expression.ts";
 
-export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor | IRComponent;
+export type IRNode = IRElement | IRText | IRInterpolation | IRIf | IRFor | IRComponent | IRSlot;
 
 export interface IRElement {
   kind: "element";
@@ -121,4 +121,21 @@ export interface IRComponent {
   // `dynamic` splits a `:prop="expr"` bind (value is a template expression,
   // read reactively) from a static `prop="literal"` (value is the literal).
   props: Array<{ name: string; value: string; dynamic: boolean }>;
+  // The DEFAULT-slot body: the component's own children in the parent template
+  // (`<Child>…here…</Child>`), rendered with the PARENT's ctx/scope but mounted at
+  // the child's `<slot>` outlet. Null when the parent passes nothing (whitespace-
+  // only children collapse to null), so codegen omits the slots argument entirely.
+  // Named/scoped slots are rejected fail-loud in transform — only the default slot.
+  slot: Array<IRNode> | null;
+}
+
+// A `<slot>` outlet inside a COMPONENT's own template. Codegen lowers it to a
+// `mountSlot(parent, $slots, fallbackFactory, gui)` call: if the parent passed a
+// default slot it renders that (parent-authored, parent scope), else it renders
+// `fallback` (the outlet's own children, child-authored, child scope). Only the
+// default slot exists this slice — a `name`/`:x` on `<slot>` is rejected in transform.
+export interface IRSlot {
+  kind: "slot";
+  // The outlet's own children, shown when the parent supplies no slot content.
+  fallback: Array<IRNode>;
 }

@@ -1,7 +1,7 @@
 import { DecaCompileError } from "../errors.ts";
 import { TAG_CREATORS, FORMATTING_TAGS, EVENT_METHODS, ATTR_SETTERS } from "../tables.ts";
 import { rewriteExpression, rewriteHandler, rewriteModelTarget, forValueLocals } from "./expression.ts";
-import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent, IRModel } from "./ir.ts";
+import type { IRNode, IRElement, IRText, IRInterpolation, IRIf, IRFor, IRComponent, IRSlot, IRModel } from "./ir.ts";
 
 // IR -> source string of a `render(_ctx, gui)` function.
 //
@@ -44,11 +44,21 @@ export function generate(nodes: Array<IRNode>, styles: Array<string> = []): stri
       roots.push(genRootFor(node, ctx));
       continue;
     }
+    if (node.kind === "slot") {
+      // A root-level `<slot>` has no parent element const to mount into, and a
+      // slot expands to 0..N nodes — which would break the single-root-component
+      // invariant (createComponent requires exactly one root). Require the author
+      // to wrap it, matching the same single-root rule v-if/v-for roots follow.
+      throw new DecaCompileError(
+        "A root-level <slot> is not supported — wrap it in a single root element " +
+          "(e.g. <div><slot/></div>).",
+      );
+    }
     roots.push(genNode(node, ctx));
   }
 
   const body = ctx.lines.map((l) => `  ${l}`).join("\n");
-  return `export function render(_ctx, gui) {\n${body}\n  return [${roots.join(", ")}];\n}`;
+  return `export function render(_ctx, gui, $slots) {\n${body}\n  return [${roots.join(", ")}];\n}`;
 }
 
 function genNode(node: IRNode, ctx: Ctx): string {
@@ -68,6 +78,10 @@ function genNode(node: IRNode, ctx: Ctx): string {
     case "for":
       // Same as v-if: v-for is lowered by genRootFor / genNestedFor, never here.
       throw new DecaCompileError("Internal: v-for reached genNode (should be handled by caller).");
+    case "slot":
+      // Same as v-if/v-for: a <slot> outlet expands to 0..N nodes via mountSlot,
+      // so it is special-cased in the children loop, never appended as one node.
+      throw new DecaCompileError("Internal: <slot> reached genNode (should be handled by caller).");
   }
 }
 
@@ -100,6 +114,10 @@ function genElement(node: IRElement, ctx: Ctx): string {
     }
     if (child.kind === "for") {
       genNestedFor(child, name, ctx);
+      continue;
+    }
+    if (child.kind === "slot") {
+      genSlot(child, name, ctx);
       continue;
     }
     const childName = genNode(child, ctx);
@@ -465,12 +483,74 @@ function genBranchFactory(children: Array<IRNode>, ctx: Ctx): string {
 // dynamic prop stays reactive with no extra machinery; a static prop is just a
 // constant getter. The child-side props proxy (component.ts) calls the getter on
 // read. `gui` is threaded from render's own param so the child can create nodes.
+//
+// A default slot (the component's own children) is emitted as a 4th argument: a
+// `{ default: (_parent) => { …append into _parent… } }` object whose factory
+// builds the slot body with the PARENT's `_ctx`/`gui` (closed over lexically) and
+// appends each node into the child's outlet element handed in at call time. The
+// runtime re-runs it under the parent scope/instance so its effects and inject()
+// resolve against the parent. When the parent passes nothing (`node.slot` null),
+// the 3-arg call is emitted unchanged, so childless `<Child />` usage is untouched.
 function genComponent(node: IRComponent, ctx: Ctx): string {
   const name = `n${ctx.counter++}`;
-  ctx.lines.push(
-    `const ${name} = createComponent(${rewriteExpression(node.tag)}, ${genProps(node.props)}, gui);`,
-  );
+  const base = `createComponent(${rewriteExpression(node.tag)}, ${genProps(node.props)}, gui`;
+  if (node.slot) {
+    const factory = genFragmentFactory(node.slot, ctx);
+    ctx.lines.push(`const ${name} = ${base}, { default: ${factory} });`);
+  } else {
+    ctx.lines.push(`const ${name} = ${base});`);
+  }
   return name;
+}
+
+// A `<slot>` outlet inside this component's own template. Emits a mountSlot call:
+// the runtime renders the parent-supplied default slot when present, else the
+// fallback factory built here (the outlet's own children, in the CHILD scope).
+// Like a nested v-if/v-for, the parent element const is in scope, so mountSlot
+// hands it to whichever factory runs — the slot expands to 0..N children of it.
+function genSlot(node: IRSlot, parent: string, ctx: Ctx): void {
+  const fallback = genFragmentFactory(node.fallback, ctx);
+  ctx.lines.push(`mountSlot(${parent}, $slots, ${fallback});`);
+}
+
+// A fragment factory: `(_parent) => { …append nodes into _parent… }` with its own
+// private line buffer (the swapped-buffer trick shared with genBranchFactory).
+// Unlike a v-if branch or v-for row — which must have a single element/component
+// root — a slot body or fallback is a FRAGMENT of any number of nodes of any kind.
+// So it mirrors genElement's OWN child loop: it appends each node into the parent
+// handed in at runtime, and routes nested if/for through genNestedIf/genNestedFor
+// (which append their anchor + wire the directive into that same parent). This is
+// why the factory takes the parent rather than returning a node array — a
+// top-level v-if in slot content has no single node to return, but it appends fine.
+function genFragmentFactory(children: Array<IRNode>, ctx: Ctx): string {
+  const saved = ctx.lines;
+  const buffer: Array<string> = [];
+  ctx.lines = buffer;
+  const parent = "_parent";
+
+  for (const child of children) {
+    if (child.kind === "if") {
+      genNestedIf(child, parent, ctx);
+      continue;
+    }
+    if (child.kind === "for") {
+      genNestedFor(child, parent, ctx);
+      continue;
+    }
+    if (child.kind === "slot") {
+      // A `<slot>` nested directly inside slot content is slot forwarding — out of
+      // this slice. (An element-wrapped one is fine: it hits genElement's own loop.)
+      throw new DecaCompileError(
+        "A <slot> directly inside slot content (slot forwarding) is not supported in this slice.",
+      );
+    }
+    const childName = genNode(child, ctx);
+    ctx.lines.push(`append(${parent}, ${childName});`);
+  }
+
+  ctx.lines = saved;
+  const body = buffer.map((l) => `    ${l}`).join("\n");
+  return `(${parent}) => {\n${body}\n  }`;
 }
 
 // Props are emitted as getters keyed by the CAMELISED attribute name:
