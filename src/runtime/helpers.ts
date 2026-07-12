@@ -7,6 +7,7 @@ import {
   getCurrentScope,
   createScope,
   runWithScope,
+  untracked,
   type WatchHandle,
   type Scope,
 } from "../reactivity.ts";
@@ -500,14 +501,25 @@ function createRow(
 
 // Reuse a row: write the new values into its signals (only on change). With sync
 // flush the row's bindings re-run immediately — no remount, DOM identity kept.
+//
+// Runs UNTRACKED: this executes inside the list's own renderEffect, so a plain
+// read of `row.itemSig.value` in the change-guard would subscribe the LIST effect
+// to every row's item signal (a spurious self-dep), and the subsequent write would
+// then synchronously re-enter the list effect mid-reconcile via sigrea's unbatched
+// sync flush — reassigning `oldBlocks` under the running diff and stranding its
+// unmount loop on `undefined`. Severing tracking here keeps the list effect's deps
+// to exactly {source, keys}; the write still flushes the ROW's own bindings (their
+// scopes subscribed them), just not the list. See createFor.
 // INVARIANT: `row.key` is left untouched because a row is only ever reused when
 // its key already equals the new key (suffix/prefix key-equality or a hit in the
 // candidate map). Callers must uphold that — reusing a row under a different key
 // would leave `row.key` stale and corrupt the next diff.
 function updateRow(row: Row, item: unknown, keyVal: unknown, indexVal: unknown): void {
-  if (row.itemSig.value !== item) row.itemSig.value = item;
-  if (row.keySig && row.keySig.value !== keyVal) row.keySig.value = keyVal;
-  if (row.indexSig && row.indexSig.value !== indexVal) row.indexSig.value = indexVal;
+  untracked(() => {
+    if (row.itemSig.value !== item) row.itemSig.value = item;
+    if (row.keySig && row.keySig.value !== keyVal) row.keySig.value = keyVal;
+    if (row.indexSig && row.indexSig.value !== indexVal) row.indexSig.value = indexVal;
+  });
 }
 
 // Tear down a removed row: dispose its scope (kills its effects/handlers) then

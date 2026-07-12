@@ -5,15 +5,7 @@ import DeeplyNested from "./DeeplyNested.vue";
 
 const props = defineProps({ name: String, count: Number });
 
-watchEffect(() => {
-  console.log(props.count);
-});
-
 const scopedFailureCount = inject("hii");
-
-watchEffect(() => {
-  console.log(scopedFailureCount.value);
-});
 </script>
 
 <template>

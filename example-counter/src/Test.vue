@@ -13,7 +13,6 @@ const sortOrders = deepSignal(
 )
 
 const filteredData = computed(() => {
-  console.log(props);
   let { data, filterKey } = props
   if (filterKey) {
     filterKey = filterKey.toLowerCase()

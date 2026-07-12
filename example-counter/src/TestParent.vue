@@ -10,10 +10,6 @@ const gridData = [
   { name: 'Jackie Chan', power: 7000 },
   { name: 'Jet Li', power: 8000 }
 ]
-
-watchEffect(() => {
-  console.log(searchQuery);
-});
 </script>
 
 <template>
