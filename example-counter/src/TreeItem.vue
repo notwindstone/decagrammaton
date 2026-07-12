@@ -29,7 +29,7 @@ function addChild() {
 </script>
 
 <template>
-  <li>
+  <li class="item">
     <div
       :class="{ bold: isFolder }"
       @click="toggle"

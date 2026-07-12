@@ -1,6 +1,6 @@
 <script setup>
 import DemoGrid from './Test.vue'
-import { signal } from 'decagrammaton'
+import { watchEffect, signal } from 'decagrammaton'
 
 const searchQuery = signal('')
 const gridColumns = ['name', 'power']
@@ -10,15 +10,20 @@ const gridData = [
   { name: 'Jackie Chan', power: 7000 },
   { name: 'Jet Li', power: 8000 }
 ]
+
+watchEffect(() => {
+  console.log(searchQuery);
+});
 </script>
 
 <template>
-  <form id="search">
-    Search <input name="query" v-model="searchQuery">
-  </form>
-  <DemoGrid
-    :data="gridData"
-    :columns="gridColumns"
-    :filter-key="searchQuery">
-  </DemoGrid>
+  <div id="search">
+    Search <input name="query" v-model="searchQuery" />
+    {{ searchQuery }}
+    <DemoGrid
+      :data="gridData"
+      :columns="gridColumns"
+      :filterKey="searchQuery">
+    </DemoGrid>
+  </div>
 </template>

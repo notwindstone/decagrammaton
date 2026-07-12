@@ -2,6 +2,7 @@
 import { signal, computed, provide } from "decagrammaton";
 import Greeting from "./Greeting.vue";
 import TreeView from "./TreeView.vue";
+import TestParent from "./TestParent.vue";
 
 const count = signal(0);
 function inc() {
@@ -71,6 +72,7 @@ const draft = signal("");          // .lazy
 
 <template>
   <TreeView />
+  <TestParent />
 
   <button :style="{
     backgroundColor: 'red'

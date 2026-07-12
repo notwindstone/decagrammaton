@@ -1,5 +1,5 @@
 <script setup>
-import { signal, computed } from 'decagrammaton'
+import { signal, deepSignal, computed } from 'decagrammaton'
 
 const props = defineProps({
   data: Array,
@@ -8,11 +8,12 @@ const props = defineProps({
 })
 
 const sortKey = signal('')
-const sortOrders = signal(
+const sortOrders = deepSignal(
   props.columns.reduce((o, key) => ((o[key] = 1), o), {})
 )
 
 const filteredData = computed(() => {
+  console.log(props);
   let { data, filterKey } = props
   if (filterKey) {
     filterKey = filterKey.toLowerCase()
@@ -24,7 +25,7 @@ const filteredData = computed(() => {
   }
   const key = sortKey.value
   if (key) {
-    const order = sortOrders.value[key]
+    const order = sortOrders[key]
     data = data.slice().sort((a, b) => {
       a = a[key]
       b = b[key]
@@ -36,7 +37,7 @@ const filteredData = computed(() => {
 
 function sortBy(key) {
   sortKey.value = key
-  sortOrders.value[key] *= -1
+  sortOrders[key] *= -1
 }
 
 function capitalize(str) {
@@ -45,27 +46,29 @@ function capitalize(str) {
 </script>
 
 <template>
-  <table v-if="filteredData.length">
-    <thead>
-    <tr>
-      <th v-for="key in columns"
-          @click="sortBy(key)"
-          :class="{ active: sortKey == key }">
-        {{ capitalize(key) }}
-        <span class="arrow" :class="sortOrders[key] > 0 ? 'asc' : 'dsc'">
+  <div>
+    <table v-if="filteredData.length">
+      <thead>
+      <tr>
+        <th v-for="key in columns"
+            @click="sortBy(key)"
+            :class="{ active: sortKey == key }">
+          {{ capitalize(key) }}
+          <span class="arrow" :class="sortOrders[key] > 0 ? 'asc' : 'dsc'">
           </span>
-      </th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr v-for="entry in filteredData">
-      <td v-for="key in columns">
-        {{entry[key]}}
-      </td>
-    </tr>
-    </tbody>
-  </table>
-  <p v-else>No matches found.</p>
+        </th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr v-for="entry in filteredData">
+        <td v-for="key in columns">
+          {{entry[key]}}
+        </td>
+      </tr>
+      </tbody>
+    </table>
+    <p v-else>No matches found.</p>
+  </div>
 </template>
 
 <style>
