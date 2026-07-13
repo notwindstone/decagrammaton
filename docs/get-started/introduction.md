@@ -23,17 +23,17 @@ Decagrammaton was made for the sandboxed plugin system of Kaede, but it might be
 
 ## Single-File Components (SFC)
 
-Decagrammaton uses Vue 3-like syntax in `.vue` files. A component may have three sections: `<script setup>`, `<style>`, and `<template>`. The semantics of Decagrammaton usually match Vue 3. An example of:
+Decagrammaton uses Vue 3-like syntax in `.vue` files. A component may have three sections: `<script setup>`, `<style>`, and `<template>`. The semantics of Decagrammaton usually match Vue 3. An example of the classic counter component:
 
 ```vue
 <script setup>
-  import { signal } from "decagrammaton";
+import { ref } from "decagrammaton";
 
-  const count = signal(0);
+const count = ref<number>(0);
 
-  function increment() {
-    count.value++;
-  }
+function increment() {
+  count.value++;
+}
 </script>
 
 <style>
@@ -61,15 +61,9 @@ Output:
 
 <Counter />
 
-Some notes:
-
-- Reactivity comes from `@sigrea/core` — write `count.value` in `<script setup>`, but in templates the compiler auto-unwraps signals, so `{{ count }}` is enough (no `.value`).
-- The top-level declarations in `<script setup>` are available in the template.
-- This is Vue 3 syntax, but **not** Vue 3 semantics — a large subset is intentionally unsupported. See [Differences from Vue 3](/get-started/differences) for the full list.
-
 ## Setup
 
-Initialize a `vite` project (select `Vanilla` in the framework selection section):
+Initialize a `vite` project (select `Vue` in the framework selection section):
 
 ```bash
 bun create vite@latest
@@ -81,7 +75,19 @@ Install the package:
 bun add decagrammaton
 ```
 
-Register the Vite plugin in your `vite.config.ts`. The plugin, `malkuth`, compiles every `.vue` file into imperative Ark API calls:
+If you want to use Decagrammaton outside the Kaede plugins, also install `ark-of-atrahasis`:
+
+```bash
+bun add ark-of-atrahasis
+```
+
+Make your `vue` package a dev dependency:
+
+```bash
+bun add -d vue
+```
+
+Register the Vite plugin in your `vite.config.ts`:
 
 ```ts
 import { defineConfig } from "vite";
@@ -92,19 +98,21 @@ export default defineConfig({
 });
 ```
 
-Create your entry point. `createApp(RootComponent).mount(element, gui)` takes an Ark `SafeDocument` as the rendering target instead of the browser DOM:
+Now, `main.ts`:
 
 ```ts
 import { createApp } from "decagrammaton";
-import { createSafeDocument } from "ark-of-atrahasis";
 import Counter from "./Counter.vue";
 
-// The provided string is an id used for the safe document's mount lookup.
-const gui = createSafeDocument("app");
+const { createSafeDocument } = scopedThis;
+// If you want to use Decagrammaton outside the Kaede plugins, remove the line above and uncomment the next one
+// import { createSafeDocument } from "ark-of-atrahasis";
+
+// 'id' is used in 'document#getElementById'
+const id = "app";
+const gui = createSafeDocument(id);
 const app = createApp(Counter);
 
-// mount() returns a cleanup function that tears down the whole reactive subtree.
-app.mount(gui.getElement("app")!, gui);
+// 'unmount' removes the mounted UI
+const unmount = app.mount(gui.getElement(id)!, gui);
 ```
-
-Inside a SES compartment, `createSafeDocument` is exposed by the host rather than imported directly — the compartment only sees the globals Ark of Atrahasis hands it, so nothing here needs `window` or `document`.

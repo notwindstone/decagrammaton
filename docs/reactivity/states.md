@@ -37,9 +37,9 @@ In `<script setup>` you always go through `.value`. In the template you **don't*
 
 ```vue
 <script setup>
-  import { signal } from "decagrammaton";
+  import { ref } from "decagrammaton";
 
-  const name = signal("Sensei");
+  const name = ref("Sensei");
 </script>
 
 <template>
@@ -47,7 +47,7 @@ In `<script setup>` you always go through `.value`. In the template you **don't*
 </template>
 ```
 
-When `name.value` changes, the text node updates automatically. (Writing `{{ name.value }}` also works — `.value` on a plain object is harmless — but the idiomatic Vue form is `{{ name }}`.)
+When `name.value` changes, the text node updates automatically. (Writing `name.value` in the bracket expression also works — `.value` on a plain object is harmless — but the idiomatic Vue form is `name`.)
 
 ### Updating complex state
 
@@ -150,3 +150,59 @@ When a descendant genuinely needs to mutate shared state, pass a `deepSignal`. A
 
 For "global-ish" shared state that skips intermediate components, [`provide` / `inject`](/properties/injection) a signal instead — both sides then read the same signal object.
 
+### Does not exist in Vue 3
+
+```
+readonlyDeepSignal
+isComputed
+isRaw (markRaw(obj) === obj)
+resumeTracking (uses resetTracking & enableTracking?)
+untracked
+runWithScope
+disposeScope (uses `.stop()` on a scope?)
+
+DeepSignal
+ReadonlyDeepSignal
+ShallowDeepSignal
+ReadonlyShallowDeepSignal
+ReadonlySignal
+Cleanup (matches OnCleanup probably?)
+```
+
+### Exists in Vue 3
+
+```
+ref
+shallowRef
+computed
+reactive
+shallowReactive
+shallowReadonly
+toRaw
+isReactive
+readonly
+toRef
+markRaw
+watch
+watchEffect
+nextTick
+isRef
+toValue
+pauseTracking
+effectScope
+getCurrentScope
+onScopeDispose
+onMounted
+onUnmounted
+
+EffectScope
+Ref
+ShallowRef
+ComputedRef
+WatchHandle
+WatchStopHandle
+WatchOptions
+WatchCallback
+WatchSource
+WatchEffect
+```
