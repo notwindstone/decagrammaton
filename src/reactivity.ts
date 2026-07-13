@@ -8,7 +8,7 @@
 // The public `.value` ergonomics developers write in `<script setup>` come
 // straight from sigrea: `signal(0).value`, `computed(() => ...).value`.
 
-import { deepSignal as deepSignalImpl, type Signal } from "@sigrea/core";
+import { deepSignal as deepSignalImpl, type Signal as Ref } from "@sigrea/core";
 
 export {
   // signals
@@ -97,6 +97,6 @@ export type {
 // `[object Object]`. sigrea's `SignalFlags` enum is type-only (not a runtime
 // export), so the string is written literally here; it is sigrea's interop
 // contract, mirroring Vue's own `__v_isRef` template marker.
-export function ref<T>(source?: T): Signal<T | undefined> {
-  return deepSignalImpl({ value: source, __v_isSignal: true }) as unknown as Signal<T | undefined>;
+export function ref<T>(source: T): Ref<T> {
+  return deepSignalImpl({ value: source, __v_isSignal: true }) as unknown as Ref<T>;
 }

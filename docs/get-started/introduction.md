@@ -12,7 +12,7 @@ Decagrammaton is not another User Interface (UI) framework for your needs. It is
 
 ## Motivation
 
-SES compartment is arguably the best sandboxing mechanism for isolating an arbitrary JavaScript code while still running in a Webview's JavaScript engine. Code executed in SES compartments can communicate with the host in an extremely fast way since it is executed in the same engine context. This also allows optimizations by a JIT-compiler to be made. By default, SES compartments expose only safe globals (`Object`, `Array`, `String`, etc.) and allow the host to extend those globals. Therefore, it is possible to pass an object down to the compartment that can provide a function that fetches data only from specific URLs or a function that simply applies changes to the theme of an application. Overall, all these features introduce a great foundation for making one's own sandboxed plugin system!
+SES compartment is arguably the best sandboxing mechanism for isolating an arbitrary JS code while still running in a Webview's JS engine. Code executed in SES compartments can communicate with the host in an extremely fast way since it is executed in the same engine context. This also allows optimizations by a JIT-compiler to be made. By default, SES compartments expose only safe globals (`Object`, `Array`, `String`, etc.) and allow the host to extend those globals. Therefore, it is possible to pass an object down to the compartment that can provide a function that fetches data only from specific URLs or a function that simply applies changes to the theme of an application. Overall, all these features introduce a great foundation for making one's own sandboxed plugin system!
 
 Unfortunately, despite such powerful capabilities, no existing UI frameworks were built for SES. However, one might ask why can we not just use already existing UI frameworks? I have several answers for this question:
 
@@ -21,7 +21,7 @@ Unfortunately, despite such powerful capabilities, no existing UI frameworks wer
 
 Decagrammaton was made for the sandboxed plugin system of Kaede, but it might be used in my other projects alongside Ark of Atrahasis :3
 
-## Single-File Components (SFC)
+## Single-File Components
 
 Decagrammaton uses Vue 3-like syntax in `.vue` files. A component may have three sections: `<script setup>`, `<style>`, and `<template>`. The semantics of Decagrammaton usually match Vue 3. An example of the classic counter component:
 
@@ -63,7 +63,7 @@ Output:
 
 ## Setup
 
-Initialize a `vite` project (select `Vue` in the framework selection section):
+Initialize a `vite` project (select `Vue` and `TypeScript` in the framework selection section):
 
 ```bash
 bun create vite@latest
@@ -84,6 +84,7 @@ bun add ark-of-atrahasis
 Make your `vue` package a dev dependency:
 
 ```bash
+bun remove vue
 bun add -d vue
 ```
 
@@ -102,7 +103,8 @@ Now, `main.ts`:
 
 ```ts
 import { createApp } from "decagrammaton";
-import Counter from "./Counter.vue";
+import "./style.css";
+import App from "./App.vue";
 
 const { createSafeDocument } = scopedThis;
 // If you want to use Decagrammaton outside the Kaede plugins, remove the line above and uncomment the next one
@@ -111,7 +113,7 @@ const { createSafeDocument } = scopedThis;
 // 'id' is used in 'document#getElementById'
 const id = "app";
 const gui = createSafeDocument(id);
-const app = createApp(Counter);
+const app = createApp(App);
 
 // 'unmount' removes the mounted UI
 const unmount = app.mount(gui.getElement(id)!, gui);
