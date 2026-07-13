@@ -1,15 +1,15 @@
 # Effects
 
-## `$effect`
+## `watchEffect`
 
-`$effect` runs a function reactively — it re-executes whenever any signal or computed value accessed inside it changes.
+`watchEffect` runs a function reactively — it executes immediately, then re-runs whenever any signal or computed accessed inside it changes.
 
 ```ts
-import { $signal, $effect } from "decagrammaton";
+import { signal, watchEffect } from "decagrammaton";
 
-const count = $signal(0);
+const count = signal(0);
 
-const dispose = $effect(() => {
+const stop = watchEffect(() => {
   console.log("Count is now:", count.value);
 });
 // logs: "Count is now: 0"
@@ -20,68 +20,81 @@ count.value = 5;
 
 ### How it works
 
-When `$effect(fn)` is called:
+When `watchEffect(fn)` is called:
 
-1. The function `fn` runs immediately
-2. Any `.value` reads inside `fn` are tracked as dependencies
-3. When a dependency changes, `fn` runs again
-4. Returns a **dispose function** — call it to stop the effect and clean up subscriptions
+1. `fn` runs immediately.
+2. Any `.value` reads inside `fn` are tracked as dependencies.
+3. When a dependency changes, `fn` runs again.
+4. It returns a **stop handle** — call it to dispose the effect and clean up subscriptions.
 
-### Type signature
+The callback can register cleanup that runs before each re-run and on stop. (`watchEffect` follows [@sigrea/core](https://github.com/sigrea/core)'s API, which mirrors Vue's `watchEffect`.)
 
-```ts
-function $effect(fn: () => void | (() => void)): () => void;
-```
+### Stopping effects
 
-The callback can optionally return a cleanup function. This cleanup runs before each re-execution and when the effect is disposed:
+Stop an effect when it's no longer needed to avoid leaks:
 
 ```ts
-const dispose = $effect(() => {
-  const interval = setInterval(() => console.log(count.value), 1000);
-  return () => clearInterval(interval); // cleanup
-});
-```
-
-### Disposing effects
-
-Always dispose effects when they're no longer needed to avoid memory leaks:
-
-```ts
-const dispose = $effect(() => {
+const stop = watchEffect(() => {
   console.log(count.value);
 });
 
 // later, when done:
-dispose();
+stop();
 ```
 
 ::: tip
-Inside `.deca` templates, you rarely need to use `$effect` directly. The framework automatically wraps template expressions in effects for you — text nodes, attribute bindings, conditional branches, and list iterations all use effects internally.
+Inside a `.vue` template, you rarely need `watchEffect` directly. The compiler already wraps every template expression, attribute binding, conditional branch, and list iteration in a render effect for you. Reach for `watchEffect` for side effects that live *outside* the template.
 :::
 
-### When to use `$effect`
+## `watch`
 
-Use `$effect` for side effects that should react to state changes but live outside the template:
+`watch` observes a specific source (or sources) and runs a callback with the new and old values only when it changes — it does not run the body eagerly for tracking the way `watchEffect` does:
 
 ```ts
-const theme = $signal("light");
+import { signal, watch } from "decagrammaton";
 
-$effect(() => {
-  document.body.className = theme.value === "dark" ? "dark-mode" : "";
+const query = signal("");
+
+watch(query, (next, prev) => {
+  console.log(`query changed: ${prev} -> ${next}`);
+});
+```
+
+Use `watch` when you need the previous value or want to react to one explicit source; use `watchEffect` when you just want "re-run whenever anything I read changes."
+
+## Lifecycle & scope helpers
+
+Decagrammaton re-exports the sigrea scope/lifecycle helpers. Each component instance owns a scope, so effects registered during setup are disposed automatically when the component unmounts:
+
+- `onMount(fn)` / `onUnmount(fn)` — run on component mount / unmount.
+- `onDispose(fn)` — register teardown on the current reactive scope.
+- `nextTick()` — await the next reactivity flush.
+- `getCurrentScope`, `createScope`, `runWithScope`, `disposeScope`, `Scope` — lower-level scope control.
+- `untracked(fn)`, `pauseTracking()`, `resumeTracking()` — read reactive state without subscribing.
+
+## When to use `watchEffect`
+
+Use it for side effects that should react to state changes but live outside the template:
+
+```ts
+const theme = signal("light");
+
+watchEffect(() => {
+  syncThemeToHost(theme.value === "dark" ? "dark" : "light");
 });
 ```
 
 Common use cases:
-- Logging or debugging reactive state
-- Syncing state to `localStorage` or external APIs
-- Setting up/tearing down subscriptions based on reactive values
-- Triggering imperative DOM operations outside the template
 
-### `$effect` vs `$computed`
+- Logging or debugging reactive state.
+- Syncing state to an external host API.
+- Setting up / tearing down subscriptions based on reactive values.
 
-| `$effect` | `$computed` |
+## `watchEffect` vs `computed`
+
+| `watchEffect` | `computed` |
 |---|---|
 | For **side effects** (do something) | For **derived values** (calculate something) |
-| Returns a dispose function | Returns a reactive value with `.value` |
+| Returns a stop handle | Returns a reactive value with `.value` |
 | Runs immediately, re-runs on changes | Recalculates on demand when dependencies change |
 | No return value used by the framework | Return value is cached and trackable |

@@ -1,7 +1,4 @@
-export { $signal, $shallowSignal, $computed, $effect, startBatch, endBatch } from "./reactivity/wrapper.ts";
-export type { SignalType, ComputedType } from "./reactivity/wrapper.ts";
-export { mount } from "./utils/render.ts";
-export { createApp } from "./app.ts";
-export type { AppInstance, DecaModule } from "./app.ts";
-export type { CompiledComponent } from "./compiler/compiler.ts";
-export type { ComponentDefinitionType } from "./types/component/component-definition.type.ts";
+export * from "./reactivity.ts";
+export { createApp } from "./runtime/component.ts";
+export type { ComponentModule, AppInstance } from "./runtime/component.ts";
+export { provide, inject } from "./runtime/instance.ts";

@@ -2,137 +2,118 @@
 
 ## `defineProps`
 
-`defineProps()` is a compiler macro that lets a child component receive data from its parent.
+`defineProps` is a Vue compiler macro that declares the props a child component receives. Pass it an object describing the prop names (the constructor values are Vue-style declarations and are not validated at runtime here):
 
-```html
-<!-- child.deca -->
-<script lang="ts">
-  const { name, age } = defineProps();
+```vue
+<!-- Child.vue -->
+<script setup>
+  const props = defineProps({ name: String, age: Number });
 </script>
 
 <template>
-  <p>{name} is {age} years old</p>
+  <p>{{ name }} is {{ age }} years old</p>
 </template>
 ```
 
-```html
-<!-- parent.deca -->
-<script lang="ts">
-  import Child from "./child.deca";
+```vue
+<!-- Parent.vue -->
+<script setup>
+  import Child from "./Child.vue";
 </script>
 
 <template>
-  <Child name="Aru" age="16" />
+  <Child name="Aru" :age="16" />
 </template>
 ```
 
 ### How it works
 
-`defineProps` is **not imported** — it's injected by the compiler at build time. Calling `defineProps()` returns an object containing all the attributes passed to the component tag in the parent template.
+`defineProps` is **not imported** — it's a macro handled by `@vue/compiler-sfc` at build time. The values a parent passes are exposed to the child both as the returned `props` object and as bare identifiers in the template (`{{ name }}` resolves to the prop when no same-named local shadows it).
 
 Props can be passed as:
-- **Static strings** — `name="Aru"` passes the string `"Aru"`
-- **Expressions** — `count={mySignal}` evaluates the expression and passes the result
 
-### Destructuring
+- **Static strings** — `name="Aru"` passes the string `"Aru"`.
+- **Bindings** — `:age="16"` or `:count="count"` evaluates the expression and passes the result. A binding that reads a signal stays reactive: the parent's signal is tracked through a getter, so the child re-renders when it changes.
 
-The idiomatic way to use `defineProps` is to destructure the return value:
+### Props are read-only and one-way
 
-```html
-<script lang="ts">
-  const { title, onSubmit, items } = defineProps();
-</script>
+The child receives prop **values**, and the props object is read-only — assigning to a prop throws:
+
+```js
+props.name = "Hina"; // Error: props are read-only (they belong to the parent)
 ```
 
-You can also keep the full object:
-
-```html
-<script lang="ts">
-  const props = defineProps();
-  // props.title, props.onSubmit, etc.
-</script>
-```
+There is no component `v-model` and no `defineEmits` / `emit` channel — both throw at build time. A child does not send values back to its parent through the component boundary. To share writable state, see below.
 
 ### Passing different types
 
-#### Signals (reactive two-way binding)
+#### Reactive values (signals / computed)
 
-When you pass a signal as a prop, the child receives a **reference** to the same signal object. Changes propagate both ways:
+Passing a `signal` or `computed` through a binding keeps the displayed value reactive, but the child sees the **unwrapped value** — the template context unwraps signals on read. The child can display it, not reassign the parent's signal:
 
-```html
-<!-- parent.deca -->
-<script lang="ts">
-  import { $signal } from "decagrammaton";
-  import FilterBar from "./filter-bar.deca";
+```vue
+<Greeting name="world" :count="count" />
+```
 
-  const filter = $signal("all");
+```vue
+<!-- Greeting.vue -->
+<script setup>
+  const props = defineProps({ name: String, count: Number });
 </script>
 
 <template>
-  <FilterBar filter={filter} />
-  <p>Active filter: {filter.value}</p>
+  <p>Hello {{ name }}, the count is {{ count }}.</p>
 </template>
 ```
 
-```html
-<!-- filter-bar.deca -->
-<script lang="ts">
-  const { filter } = defineProps();
+#### Shared mutable objects (`deepSignal`)
+
+A `deepSignal` is a reactive proxy object, not a `.value` wrapper, so it is **not** unwrapped — the child gets the same proxy and can mutate it in place, with changes visible to every holder:
+
+```vue
+<TreeItem :model="model" />
+```
+
+```vue
+<!-- TreeItem.vue -->
+<script setup>
+  const props = defineProps({ model: Object });
+
+  function addChild() {
+    props.model.children.push({ name: "new stuff" }); // shared + tracked
+  }
 </script>
-
-<template>
-  <button @click={() => filter.value = 'all'}>All</button>
-  <button @click={() => filter.value = 'active'}>Active</button>
-</template>
 ```
 
-#### Computed values (reactive read-only)
-
-Pass a `$computed` value for derived data that the child should display but not modify:
-
-```html
-<ProgressFooter stats={stats} />
-```
-
-```html
-<!-- progress-footer.deca -->
-<script lang="ts">
-  const { stats } = defineProps();
-</script>
-
-<template>
-  <p>{stats.value.done} / {stats.value.total} completed</p>
-</template>
-```
+This is the intended pattern for downward-flowing mutable state (used by the tree-view example).
 
 #### Callbacks
 
-Pass functions to let the child communicate events back to the parent:
+Because there is no `emit`, the way a child signals its parent is a **callback prop** — pass a function down and the child calls it:
 
-```html
-<TaskInput onAdd={addTask} onInput={handleInput} />
+```vue
+<TaskInput :onAdd="addTask" />
 ```
 
-```html
-<!-- task-input.deca -->
-<script lang="ts">
-  const { onAdd, onInput } = defineProps();
+```vue
+<!-- TaskInput.vue -->
+<script setup>
+  const props = defineProps({ onAdd: Function });
 </script>
 
 <template>
-  <input @input={onInput} />
-  <button @click={onAdd}>Add</button>
+  <button @click="onAdd">Add</button>
 </template>
 ```
 
 #### Plain data
 
-Non-reactive objects and primitives pass by value:
+Non-reactive objects and primitives pass by value.
 
-```html
-<TaskItem task={task} />
-```
+### kebab-case props
+
+Prop names written in kebab-case on the tag are normalized to camelCase for the child, matching Vue — `<Child my-prop="x" />` is read as `myProp`. (A bare `_ctx["my-prop"]` is not valid JS, so the compiler camelises the key.)
 
 ::: warning
-`defineProps` is a **compiler macro**. It only works at the top level of a `.deca` `<script>` block. Don't try to import it or call it conditionally.
+`defineProps` is a **compiler macro**. It only works at the top level of a `<script setup>` block — don't import it or call it conditionally.
 :::

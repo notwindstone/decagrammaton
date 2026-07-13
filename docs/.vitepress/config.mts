@@ -1,27 +1,11 @@
 import { defineConfig } from 'vitepress'
-//import { malkuth } from "decagrammaton/vite";
-import { fileURLToPath } from 'node:url'
-// Imports 'decagrammaton/vite' locally to test it
-import { malkuth } from "../../src/vite.ts";
 
 export default defineConfig({
   title: "Decagrammaton",
-  description: "A declarative, lightweight, and reactive JavaScript framework that can run in Secure ECMAScript compartments",
+  description: "A Vue 3-like JavaScript framework designed for Secure ECMAScript compartments",
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
   ],
-  vite: {
-    plugins: [malkuth()],
-    resolve: {
-      alias: [
-        {
-          find: /^decagrammaton$/,
-          // Imports 'decagrammaton' locally to test it
-          replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
-        },
-      ],
-    },
-  },
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
@@ -33,6 +17,7 @@ export default defineConfig({
         text: 'Get Started',
         items: [
           { text: 'Introduction', link: '/get-started/introduction' },
+          { text: 'Differences from Vue 3', link: '/get-started/differences' },
         ],
       },
       {

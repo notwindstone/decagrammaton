@@ -1,13 +1,13 @@
 # States
 
-## `$signal`
+## `signal`
 
-`$signal` creates a reactive state container. It wraps [alien-signals](https://github.com/nicepkg/alien-signals) under the hood, exposing a `.value` property for reading and writing.
+`signal` creates a reactive state container. Decagrammaton's reactivity is a thin re-export of [@sigrea/core](https://github.com/sigrea/core), so a signal exposes a `.value` property for reading and writing.
 
 ```ts
-import { $signal } from "decagrammaton";
+import { signal } from "decagrammaton";
 
-const count = $signal(0);
+const count = signal(0);
 
 count.value; // 0
 count.value = 5;
@@ -16,45 +16,45 @@ count.value; // 5
 
 ### How it works
 
-`$signal(initialValue)` returns an object with a single `.value` property defined via `Object.defineProperty`:
+`signal(initialValue)` returns an object with a `.value` accessor:
 
-- **Getting** `.value` reads the underlying signal — any active `$effect` or `$computed` that reads it becomes a subscriber
-- **Setting** `.value` writes to the signal and notifies all subscribers, triggering re-renders and recomputation
+- **Getting** `.value` reads the underlying signal — any active `watchEffect`, `computed`, or template render effect that reads it becomes a subscriber.
+- **Setting** `.value` writes to the signal and notifies all subscribers, triggering re-renders and recomputation.
 
 ### Type signature
 
 ```ts
-function $signal<T>(initialValue: T): SignalType<T>;
+function signal<T>(initialValue: T): Signal<T>;
 
-interface SignalType<T> {
+interface Signal<T> {
   value: T;
 }
 ```
 
 ### Usage in templates
 
-In `.deca` templates, always access the state through `.value`:
+In `<script setup>` you always go through `.value`. In the template you **don't** — the compiler wraps each expression in a render effect and auto-unwraps signals, so you reference the binding directly:
 
-```html
-<script lang="ts">
-  import { $signal } from "decagrammaton";
+```vue
+<script setup>
+  import { ref } from "decagrammaton";
 
-  const name = $signal("Sensei");
+  const name = ref("Sensei");
 </script>
 
 <template>
-  <p>Hello, {name.value}!</p>
+  <p>Hello, {{ name }}!</p>
 </template>
 ```
 
-The framework wraps template expressions in effects internally. When `name.value` changes, the text node updates automatically.
+When `name.value` changes, the text node updates automatically. (Writing `name.value` in the bracket expression also works — `.value` on a plain object is harmless — but the idiomatic Vue form is `name`.)
 
 ### Updating complex state
 
-For objects and arrays, you must replace the entire `.value` to trigger reactivity — mutations inside the object won't be tracked:
+A plain `signal` tracks reassignment of `.value`, not mutation of what's inside it. For an object or array, replace the whole value to trigger reactivity:
 
 ```ts
-const tasks = $signal([
+const tasks = signal([
   { id: 1, text: "Clear Lesson 25", done: false },
 ]);
 
@@ -65,50 +65,144 @@ tasks.value = [...tasks.value, { id: 2, text: "Farm elephs", done: false }];
 tasks.value.push({ id: 3, text: "Oops", done: false });
 ```
 
-### Batching updates
+### `deepSignal` — reactive mutation
 
-When you need to set multiple signals at once without triggering intermediate re-renders, use `startBatch` and `endBatch`:
+When you *do* want to mutate nested structures in place, use `deepSignal`. It wraps the value in a deep reactive proxy, so property writes and array mutations are tracked without reassigning `.value`. Unlike `signal`, you read and write the properties directly (no `.value` on the container):
 
 ```ts
-import { $signal, startBatch, endBatch } from "decagrammaton";
+import { deepSignal } from "decagrammaton";
 
-const a = $signal(1);
-const b = $signal(2);
+const tree = deepSignal({
+  name: "My Tree",
+  children: [{ name: "hello" }, { name: "world" }],
+});
 
-startBatch();
-a.value = 10;
-b.value = 20;
-endBatch(); // subscribers notified once here
+// Tracked — no reassignment needed:
+tree.children.push({ name: "new stuff" });
+tree.name = "Renamed";
 ```
+
+This is the shape used by the tree-view example: a `deepSignal` model passed down as a prop, mutated in place by child components.
+
+Related variants are also re-exported: `shallowDeepSignal`, `readonlyDeepSignal`, `readonlyShallowDeepSignal`, plus the helpers `isSignal`, `isDeepSignal`, `toValue`, `toRawDeepSignal`, and `markRaw`.
 
 ### Passing signals as props
 
-Signals are plain objects, so passing them as props gives the child component a reference to the same signal. This means **two-way binding works automatically**:
+Props are **one-way and read-only**. When you pass a signal through a `:prop` binding, the child receives the signal's *unwrapped value*, not the signal object — the template context unwraps signals on read, and the prop getter reads through that context:
 
-```html
-<!-- parent.deca -->
-<script lang="ts">
-  import { $signal } from "decagrammaton";
-  import Child from "./child.deca";
+```vue
+<!-- Parent.vue -->
+<script setup>
+  import { signal } from "decagrammaton";
+  import Greeting from "./Greeting.vue";
 
-  const filter = $signal("all");
+  const count = signal(0);
 </script>
 
 <template>
-  <Child filter={filter} />
-  <p>Current filter: {filter.value}</p>
+  <!-- the child sees a number, kept reactive by the getter -->
+  <Greeting :count="count" />
+  <button @click="count++">++</button>
 </template>
 ```
 
-```html
-<!-- child.deca -->
-<script lang="ts">
-  const { filter } = defineProps();
+```vue
+<!-- Greeting.vue -->
+<script setup>
+  const props = defineProps({ count: Number });
 </script>
 
 <template>
-  <button @click={() => filter.value = 'active'}>Active</button>
+  <p>The count is {{ count }}</p>
 </template>
 ```
 
-When the child sets `filter.value`, the parent sees the change too — they share the same signal object.
+The prop stays reactive (the parent's signal is tracked through the getter), but the child **cannot** write it back — attempting `props.count = …` throws. There is no component `v-model` and no `emit` channel, so a child does not push values back up through props. See [Passing Down Props](/properties/passing-down).
+
+### Sharing mutable state down the tree
+
+When a descendant genuinely needs to mutate shared state, pass a `deepSignal`. A `deepSignal` is a reactive **proxy object**, so it is *not* unwrapped by the context — the child receives the same proxy and mutations are visible everywhere:
+
+```vue
+<!-- Parent.vue -->
+<script setup>
+  import { deepSignal } from "decagrammaton";
+  import TreeItem from "./TreeItem.vue";
+
+  const model = deepSignal({ name: "root", children: [{ name: "hello" }] });
+</script>
+
+<template>
+  <TreeItem :model="model" />
+</template>
+```
+
+```vue
+<!-- TreeItem.vue -->
+<script setup>
+  const props = defineProps({ model: Object });
+
+  function addChild() {
+    props.model.children.push({ name: "new stuff" }); // tracked, shared
+  }
+</script>
+```
+
+For "global-ish" shared state that skips intermediate components, [`provide` / `inject`](/properties/injection) a signal instead — both sides then read the same signal object.
+
+### Does not exist in Vue 3
+
+```
+readonlyDeepSignal
+isComputed
+isRaw (markRaw(obj) === obj)
+resumeTracking (uses resetTracking & enableTracking?)
+untracked
+runWithScope
+disposeScope (uses `.stop()` on a scope?)
+
+DeepSignal
+ReadonlyDeepSignal
+ShallowDeepSignal
+ReadonlyShallowDeepSignal
+ReadonlySignal
+Cleanup (matches OnCleanup probably?)
+```
+
+### Exists in Vue 3
+
+```
+ref
+shallowRef
+computed
+reactive
+shallowReactive
+shallowReadonly
+toRaw
+isReactive
+readonly
+toRef
+markRaw
+watch
+watchEffect
+nextTick
+isRef
+toValue
+pauseTracking
+effectScope
+getCurrentScope
+onScopeDispose
+onMounted
+onUnmounted
+
+EffectScope
+Ref
+ShallowRef
+ComputedRef
+WatchHandle
+WatchStopHandle
+WatchOptions
+WatchCallback
+WatchSource
+WatchEffect
+```

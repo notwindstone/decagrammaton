@@ -3,7 +3,7 @@
     "target": "es2023",
     "module": "esnext",
     "lib": ["ES2023", "DOM"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "bun"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
@@ -22,6 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "test"],
   "exclude": ["src/__temporary", "src/__example", "src/main.ts"]
 }

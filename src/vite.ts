@@ -1,1 +1,1 @@
-export { malkuth } from "./compiler/vite-plugin-deca.ts";
+export { malkuth } from "./compiler/vite-plugin.ts";
