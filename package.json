@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "A Vue 3-like JavaScript framework designed for Secure ECMAScript compartments",
   "license": "GPL-3.0-only",
