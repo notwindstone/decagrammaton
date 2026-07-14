@@ -35,7 +35,7 @@
     "./compiler": {
       "types": "./dist/compiler/compiler.d.ts",
       "import": "./dist/compiler/compiler.js"
-    },
+    }
   },
   "files": [
     "dist",
