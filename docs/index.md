@@ -6,7 +6,7 @@ hero:
   text: "A UI framework for Secure ECMAScript compartments"
   tagline: Made for a Kaede Minecraft Launcher <3
   image:
-    src: logo.png
+    src: /logo.png
     alt: Decagrammaton Vending Machine
   actions:
     - theme: brand
