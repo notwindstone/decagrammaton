@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "A Vue 3-like JavaScript framework designed for Secure ECMAScript compartments",
   "license": "GPL-3.0-only",
@@ -36,9 +36,6 @@
       "types": "./dist/compiler/compiler.d.ts",
       "import": "./dist/compiler/compiler.js"
     },
-    "./deca": {
-      "types": "./types/deca.d.ts"
-    }
   },
   "files": [
     "dist",
