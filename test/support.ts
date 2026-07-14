@@ -62,12 +62,12 @@ export function freshApp(): { gui: SafeDocument; app: HTMLElement } {
 export function compileRender(template: string, styles: Array<string> = []): (ctx: unknown, gui: SafeDocument) => unknown[] {
   const src = renderSource(template, styles).replace(/^export\s+function\s+render/, "function render");
   const make = new Function(
-    "renderEffect", "on", "setText", "mountStyle", "setStyle", "normalizeClass", "append", "mountSlot",
+    "renderEffect", "on", "setText", "mountStyle", "setStyle", "normalizeClass", "append", "appendAll", "mountSlot",
     "createIf", "rootIf", "createFor", "rootFor", "createComponent", "toModelNumber", "modelArrayHas", "modelArrayToggle",
     `${src}\nreturn render;`,
   );
   return make(
-    runtime.renderEffect, runtime.on, runtime.setText, runtime.mountStyle, runtime.setStyle, runtime.normalizeClass, runtime.append, runtime.mountSlot,
+    runtime.renderEffect, runtime.on, runtime.setText, runtime.mountStyle, runtime.setStyle, runtime.normalizeClass, runtime.append, runtime.appendAll, runtime.mountSlot,
     runtime.createIf, runtime.rootIf, runtime.createFor, runtime.rootFor, runtime.createComponent, runtime.toModelNumber, runtime.modelArrayHas, runtime.modelArrayToggle,
   );
 }

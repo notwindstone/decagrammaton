@@ -45,16 +45,19 @@ export function generate(nodes: Array<IRNode>, styles: Array<string> = []): stri
       continue;
     }
     if (node.kind === "slot") {
-      // A root-level `<slot>` has no parent element const to mount into, and a
-      // slot expands to 0..N nodes — which would break the single-root-component
-      // invariant (createComponent requires exactly one root). Require the author
-      // to wrap it, matching the same single-root rule v-if/v-for roots follow.
+      // A root-level `<slot>` has no parent element const to mount into: mountSlot
+      // appends into a parent handed to it, but at the render root there is none
+      // (only the mount site knows the container, and it splices real nodes, not a
+      // slot outlet). Require the author to wrap it in a real element.
       throw new DecaCompileError(
         "A root-level <slot> is not supported — wrap it in a single root element " +
           "(e.g. <div><slot/></div>).",
       );
     }
-    roots.push(genNode(node, ctx));
+    // A component root evaluates to a FRAGMENT (Array<SafeElement>); genRootEntry
+    // spreads it (`...nX`) so the mount site sees each sibling node — createApp.mount
+    // already appends a flat root list one by one. An element stays a single `nX`.
+    roots.push(genRootEntry(node, ctx));
   }
 
   const body = ctx.lines.map((l) => `  ${l}`).join("\n");
@@ -66,7 +69,11 @@ function genNode(node: IRNode, ctx: Ctx): string {
     case "element":
       return genElement(node, ctx);
     case "component":
-      return genComponent(node, ctx);
+      // A component evaluates to a FRAGMENT (Array<SafeElement>), never a single
+      // appendable node — so every site special-cases it (appendAll into a parent,
+      // or spread via genRootEntry) before reaching genNode. Reaching here would
+      // splice an array where one node is expected: a caller bug.
+      throw new DecaCompileError("Internal: component reached genNode (should be handled by caller).");
     case "text":
       return genText(node, ctx);
     case "interpolation":
@@ -118,6 +125,13 @@ function genElement(node: IRElement, ctx: Ctx): string {
     }
     if (child.kind === "slot") {
       genSlot(child, name, ctx);
+      continue;
+    }
+    if (child.kind === "component") {
+      // A component evaluates to a FRAGMENT (Array<SafeElement>): 1..N sibling
+      // roots. appendAll splices every root into this parent, in order.
+      const childName = genComponent(child, ctx);
+      ctx.lines.push(`appendAll(${name}, ${childName});`);
       continue;
     }
     const childName = genNode(child, ctx);
@@ -409,7 +423,7 @@ function genRowFactory(children: Array<IRNode>, ctx: Ctx): string {
     if (child.kind !== "element" && child.kind !== "component") {
       throw new DecaCompileError("Internal: v-for row root must be a single element or component.");
     }
-    roots.push(genNode(child, ctx));
+    roots.push(genRootEntry(child, ctx));
   }
 
   ctx.lines = saved;
@@ -463,12 +477,22 @@ function genBranchFactory(children: Array<IRNode>, ctx: Ctx): string {
     if (child.kind !== "element" && child.kind !== "component") {
       throw new DecaCompileError("Internal: v-if branch root must be a single element or component.");
     }
-    roots.push(genNode(child, ctx));
+    roots.push(genRootEntry(child, ctx));
   }
 
   ctx.lines = saved;
   const body = buffer.map((l) => `    ${l}`).join("\n");
   return `() => {\n${body}\n    return [${roots.join(", ")}];\n  }`;
+}
+
+// Build one entry for a factory's returned roots array. An element is one node
+// (`nX`); a component is a FRAGMENT array, so it is spread (`...nX`) to flatten
+// its 1..N roots into the surrounding node list. Shared by every site that
+// returns a roots array to a splicing consumer (render root, v-if branch, v-for
+// row) — all of which iterate the returned nodes, so a spread splices correctly.
+function genRootEntry(child: IRNode, ctx: Ctx): string {
+  if (child.kind === "component") return `...${genComponent(child, ctx)}`;
+  return genNode(child, ctx);
 }
 
 // Resolve a component tag to a runtime `createComponent` call. Unlike an
@@ -543,6 +567,13 @@ function genFragmentFactory(children: Array<IRNode>, ctx: Ctx): string {
       throw new DecaCompileError(
         "A <slot> directly inside slot content (slot forwarding) is not supported in this slice.",
       );
+    }
+    if (child.kind === "component") {
+      // A component evaluates to a FRAGMENT (Array<SafeElement>): appendAll splices
+      // its 1..N roots into the parent, mirroring genElement's own child loop.
+      const childName = genComponent(child, ctx);
+      ctx.lines.push(`appendAll(${parent}, ${childName});`);
+      continue;
     }
     const childName = genNode(child, ctx);
     ctx.lines.push(`append(${parent}, ${childName});`);

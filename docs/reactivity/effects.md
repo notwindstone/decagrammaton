@@ -64,10 +64,10 @@ Use `watch` when you need the previous value or want to react to one explicit so
 
 ## Lifecycle & scope helpers
 
-Decagrammaton re-exports the sigrea scope/lifecycle helpers. Each component instance owns a scope, so effects registered during setup are disposed automatically when the component unmounts:
+Decagrammaton provides Vue-named lifecycle hooks and re-exports the sigrea scope helpers. Each component instance owns a scope, so effects registered during setup are disposed automatically when the component unmounts:
 
-- `onMount(fn)` / `onUnmount(fn)` — run on component mount / unmount.
-- `onDispose(fn)` — register teardown on the current reactive scope.
+- `onMounted(fn)` / `onUnmounted(fn)` — run after the component's nodes are in the DOM / when it tears down. `onMounted` fires child-before-parent (Vue order). These are decagrammaton's own hooks, not sigrea's `onMount`/`onUnmount` (which require a molecule and are not exported).
+- `onDispose(fn)` (aliased `onScopeDispose`) — register teardown on the current reactive scope.
 - `nextTick()` — await the next reactivity flush.
 - `getCurrentScope`, `createScope`, `runWithScope`, `disposeScope`, `Scope` — lower-level scope control.
 - `untracked(fn)`, `pauseTracking()`, `resumeTracking()` — read reactive state without subscribing.

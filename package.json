@@ -1,6 +1,6 @@
 {
   "name": "decagrammaton",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "type": "module",
   "description": "A Vue 3-like JavaScript framework designed for Secure ECMAScript compartments",
   "license": "GPL-3.0-only",
@@ -35,9 +35,6 @@
     "./compiler": {
       "types": "./dist/compiler/compiler.d.ts",
       "import": "./dist/compiler/compiler.js"
-    },
-    "./deca": {
-      "types": "./types/deca.d.ts"
     }
   },
   "files": [
@@ -53,7 +50,8 @@
     "docs:preview": "cd docs && bun run preview"
   },
   "peerDependencies": {
-    "vite": ">=5"
+    "vite": ">=5",
+    "vue": "^3.5"
   },
   "peerDependenciesMeta": {
     "vite": {
@@ -66,7 +64,8 @@
     "@types/node": "^26.1.0",
     "ark-of-atrahasis": "^0.3.1",
     "happy-dom": "^20.10.6",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vue": "^3.5.39"
   },
   "dependencies": {
     "@sigrea/core": "^0.7.2",

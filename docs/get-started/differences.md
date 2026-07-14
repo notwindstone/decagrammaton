@@ -6,7 +6,8 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 
 ## Templates
 
-- **Single root only.** A component, `v-if` branch, or `v-for` row must have exactly one root element/component — no fragments, no bare text, no sibling roots.
+- **Single-element roots for `v-if` / `v-for`.** A `v-if` branch or `v-for` row must have exactly one root element/component — no fragments, no bare text, no sibling roots. (A **component template itself** may have multiple sibling roots — `<template><div/><div/></template>` — and so may the app root. Only branch/row bodies are restricted.)
+- **A component must render at least one node.** An empty `<template>` (zero roots) is rejected — there is no placeholder node to hold its position.
 - **No `<template>` grouping.** You can't wrap a `v-if`/`v-for` group in a `<template>` tag — use a real element (e.g. `<div>`).
 - **Whitelisted tags only.** Every tag maps to an Ark creator. An unknown tag (e.g. `<marquee>`) has no creator and fails the build.
 - **Whitelisted attributes only.** There is no generic `setAttribute` — each attribute maps to a specific Ark setter. An unmapped attribute fails the build.
@@ -27,6 +28,7 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 - **`provide` / `inject` are real imports** from `decagrammaton`, not macros — and are **setup-only**.
 - **No root `app.provide()`** — provide/inject works at the component-instance level only.
 - **`.value` in script, not in templates** — the template context auto-unwraps signals on read.
+- **`vue` is a peer dependency (types only).** Every `.value` box — `ref`, `signal`/`shallowRef`, `computed`, `readonly`, and `toRef` — borrows Vue's branded `Ref` in its return type so Volar unwraps it in templates (`@click="count++"` type-checks). Nothing from `vue` is imported at runtime — it's an `import type`, erased at build. Without `vue` installed, template unwrapping falls back to `{ value }` and `count++` reports TS2356.
 
 ## Styles
 
