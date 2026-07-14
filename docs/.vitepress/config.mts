@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/decagrammaton/',
   title: "Decagrammaton",
   description: "A Vue 3-like JavaScript framework designed for Secure ECMAScript compartments",
   head: [
