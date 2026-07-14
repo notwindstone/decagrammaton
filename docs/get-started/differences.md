@@ -6,7 +6,8 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 
 ## Templates
 
-- **Single root only.** A component, `v-if` branch, or `v-for` row must have exactly one root element/component — no fragments, no bare text, no sibling roots.
+- **Single-element roots for `v-if` / `v-for`.** A `v-if` branch or `v-for` row must have exactly one root element/component — no fragments, no bare text, no sibling roots. (A **component template itself** may have multiple sibling roots — `<template><div/><div/></template>` — and so may the app root. Only branch/row bodies are restricted.)
+- **A component must render at least one node.** An empty `<template>` (zero roots) is rejected — there is no placeholder node to hold its position.
 - **No `<template>` grouping.** You can't wrap a `v-if`/`v-for` group in a `<template>` tag — use a real element (e.g. `<div>`).
 - **Whitelisted tags only.** Every tag maps to an Ark creator. An unknown tag (e.g. `<marquee>`) has no creator and fails the build.
 - **Whitelisted attributes only.** There is no generic `setAttribute` — each attribute maps to a specific Ark setter. An unmapped attribute fails the build.

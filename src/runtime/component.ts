@@ -88,8 +88,9 @@ export function createApp(root: ComponentModule): AppInstance {
 // too — same lineage discipline as createIf/createFor; (2) props flow in: the
 // codegen getters are wrapped by createProps and handed to BOTH setup(__props)
 // and createContext's fall-through layer, so a prop read inside a child effect
-// tracks the parent signal; (3) it RETURNS the child's root node instead of
-// appending — the parent's render splices it like any other node.
+// tracks the parent signal; (3) it RETURNS the child's root nodes (a fragment
+// array) instead of appending — the parent's render splices them like any other
+// node list.
 //
 // Slots (slice 7): the parent's slot factories build content that lives in the
 // CHILD's DOM but is authored by the PARENT — so each factory is wrapped to run
@@ -100,16 +101,24 @@ export function createApp(root: ComponentModule): AppInstance {
 // wrapped slots are handed to the child's render(), which invokes them at its
 // `<slot>` outlets via mountSlot.
 //
-// Single-root only (architect ruling): the child's render must yield exactly one
-// node, and it must be a real node — a root-level v-if/v-for marker has no
-// container to bind into here (that is the deferred fragment machinery). Both
-// cases fail loud rather than silently mounting nothing.
+// Multi-root: the child's render may yield N sibling roots (a fragment). We
+// return the flat array of real nodes and let the embedding site splice it — an
+// element child appends each (appendAll), a render root spreads them into the
+// roots array, a v-if branch / v-for row already iterates its node list. So a
+// multi-root child behaves exactly like the app root already does in mount().
+//
+// Two shapes still fail loud: (1) a root-level v-if/v-for MARKER — it carries an
+// anchor but no container, and only the *mounting* site (createApp/createIf/
+// createFor) knows where to bind it, not this splice-into-parent path; wrap it in
+// a real element. (2) zero roots — there is no comment/placeholder node in ark to
+// hold a position, and an empty row/branch would strand the reconciler's anchor
+// tracking, so a component must render at least one real node.
 export function createComponent(
   module: ComponentModule,
   propGetters: Record<string, () => unknown>,
   gui: SafeDocument,
   slots?: Slots,
-): SafeElement {
+): Array<SafeElement> {
   if (module == null || typeof module.setup !== "function" || typeof module.render !== "function") {
     throw new Error("createComponent: target is not a component (missing setup/render).");
   }
@@ -137,19 +146,20 @@ export function createComponent(
       const ctx = createContext(setupResult, props);
       const nodes = module.render(ctx, gui, wrappedSlots);
 
-      if (nodes.length !== 1) {
+      if (nodes.length === 0) {
         throw new Error(
-          `A component must have exactly one root node (got ${nodes.length}); ` +
-            `multi-root components are not supported in this slice.`,
+          "A component must render at least one root node (got 0); an empty component " +
+            "has no node to hold its position.",
         );
       }
-      const root = nodes[0];
-      if (isRootIf(root) || isRootFor(root)) {
-        throw new Error(
-          "A component root cannot be a bare v-if/v-for; wrap it in a single root element.",
-        );
+      for (const node of nodes) {
+        if (isRootIf(node) || isRootFor(node)) {
+          throw new Error(
+            "A component root cannot be a bare v-if/v-for; wrap it in a single root element.",
+          );
+        }
       }
-      return root as SafeElement;
+      return nodes as Array<SafeElement>;
     });
   });
 }

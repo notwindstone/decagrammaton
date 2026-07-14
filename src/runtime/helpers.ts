@@ -214,6 +214,14 @@ export function append(parent: SafeElement, child: SafeNode): void {
   parent.appendChild(child);
 }
 
+// Append every node of a fragment (a multi-root component's return value) into a
+// parent, in order. A component evaluates to `Array<SafeElement>` — one or many
+// sibling roots — so wherever an element or slot body embeds a `<Child/>`, codegen
+// emits appendAll instead of append to splice all of the child's roots in place.
+export function appendAll(parent: SafeElement, children: Array<SafeNode>): void {
+  for (const child of children) parent.appendChild(child);
+}
+
 // A slot factory: given the outlet's parent element, build the slot's nodes and
 // append each into it. Both a parent-supplied default slot (codegen's `{ default:
 // (_parent) => {…} }`) and a `<slot>`'s own fallback share this shape, so mountSlot
