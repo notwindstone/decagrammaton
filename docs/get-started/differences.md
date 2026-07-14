@@ -28,6 +28,7 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 - **`provide` / `inject` are real imports** from `decagrammaton`, not macros — and are **setup-only**.
 - **No root `app.provide()`** — provide/inject works at the component-instance level only.
 - **`.value` in script, not in templates** — the template context auto-unwraps signals on read.
+- **`vue` is a peer dependency (types only).** Every `.value` box — `ref`, `signal`/`shallowRef`, `computed`, `readonly`, and `toRef` — borrows Vue's branded `Ref` in its return type so Volar unwraps it in templates (`@click="count++"` type-checks). Nothing from `vue` is imported at runtime — it's an `import type`, erased at build. Without `vue` installed, template unwrapping falls back to `{ value }` and `count++` reports TS2356.
 
 ## Styles
 
