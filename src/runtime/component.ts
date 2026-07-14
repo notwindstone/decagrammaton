@@ -7,6 +7,7 @@ import {
   runWithInstance,
   type ComponentInstance,
 } from "./instance.ts";
+import { openMountBatch, flushMountBatch } from "./lifecycle.ts";
 
 // A compiled component module, as produced by the vite plugin: the setup()
 // factory plus the generated render() function. render() takes an optional
@@ -44,6 +45,13 @@ export function createApp(root: ComponentModule): AppInstance {
       // throws (setup-only, ruling 3).
       const instance: ComponentInstance = createInstance(null);
 
+      // Open the lifecycle mount batch for the whole tree. setup() (here and in
+      // every descendant createComponent) registers onMounted callbacks into it;
+      // they are flushed below, once all roots are in the live DOM — so an
+      // onMounted callback sees its own nodes mounted. openMountBatch returns true
+      // for this outermost site (no batch was open), so this site owns the flush.
+      openMountBatch();
+
       runWithScope(scope, () => {
         runWithInstance(instance, () => {
           const setupResult = root.setup({}, { expose: () => {} });
@@ -71,6 +79,10 @@ export function createApp(root: ComponentModule): AppInstance {
           }
         });
       });
+
+      // Whole tree is in the DOM: run every collected onMounted (LIFO — deepest
+      // component first, matching Vue's child-before-parent order).
+      flushMountBatch();
 
       return () => scope.dispose();
     },

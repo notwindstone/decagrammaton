@@ -74,10 +74,10 @@ export {
   onDispose,
   onDispose as onScopeDispose, // Vue 3.
   disposeScope,
-  onMount,
-  onMount as onMounted, // Vue 3.
-  onUnmount,
-  onUnmount as onUnmounted, // Vue 3.
+  // NOTE: sigrea's `onMount`/`onUnmount` are deliberately NOT re-exported here.
+  // They require a molecule mount-job registry decagrammaton never creates, so
+  // they throw on use. The Vue-named `onMounted`/`onUnmounted` are decagrammaton's
+  // own, wired to the component mount sites — see src/runtime/lifecycle.ts.
 } from "@sigrea/core";
 
 // ── branded `.value` boxes ───────────────────────────────────────────────────

@@ -6,3 +6,4 @@ export { createApp, createComponent } from "./component.ts";
 export type { ComponentModule, AppInstance } from "./component.ts";
 export { provide, inject } from "./instance.ts";
 export type { ComponentInstance } from "./instance.ts";
+export { onMounted, onUnmounted, openMountBatch, flushMountBatch } from "./lifecycle.ts";

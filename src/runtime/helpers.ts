@@ -13,6 +13,7 @@ import {
 } from "../reactivity.ts";
 import { EVENT_METHODS } from "./event-methods.ts";
 import { getCurrentInstance, runWithInstance, type ComponentInstance } from "./instance.ts";
+import { openMountBatch, flushMountBatch } from "./lifecycle.ts";
 
 // The runtime helpers that codegen output calls. Imported by generated render
 // modules from "decagrammaton/runtime".
@@ -312,12 +313,21 @@ export function createIf(parent: SafeElement, anchor: SafeNode, branches: Array<
 
     if (index === -1) return;
 
+    // Own a lifecycle mount batch for a branch mounted by a LATER condition flip
+    // (this effect re-runs outside any mount bracket, so no batch is open — a
+    // <Child> in the branch would call onMounted with none active and throw).
+    // On the INITIAL render this effect runs inside the root's batch, so
+    // openMountBatch returns false and the branch's onMounted flush is deferred to
+    // the root site — correct, since the tree isn't in the DOM yet. `owns` gates
+    // the flush so only the batch opener runs it.
+    const owns = openMountBatch();
     const branchScope = createScope(parentScope);
     const nodes = runWithScope(branchScope, () =>
       runWithInstance(parentInstance, () => branches[index].factory()),
     );
     for (const node of nodes) parent.insertBefore(node, anchor);
     active = { index, scope: branchScope, nodes };
+    if (owns) flushMountBatch();
   });
 }
 
@@ -587,6 +597,14 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
   let mounted = false;
 
   renderEffect(() => {
+    // A reactive re-run mounts rows outside any mount batch (the initial render's
+    // batch has already flushed), so open one here and flush it in the finally so
+    // a `<Child onMounted>` in a freshly-created row fires. On the INITIAL render
+    // this effect runs inside the component's batch, so openMountBatch returns
+    // false and this site does not flush — the row hooks ride the outer flush.
+    // try/finally covers the branch's many early returns in one place.
+    const owns = openMountBatch();
+    try {
     const values = normalizeValues(config.source());
     const newLen = values.length;
     const oldLen = oldBlocks.length;
@@ -729,6 +747,9 @@ export function createFor(parent: SafeElement, anchor: SafeNode, config: ForConf
     }
 
     oldBlocks = newBlocks;
+    } finally {
+      if (owns) flushMountBatch();
+    }
   });
 }
 
