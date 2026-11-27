@@ -1,57 +1,12 @@
 import { test, expect, describe } from "bun:test";
-import { renderSource, compileRender, freshApp } from "./support.ts";
+import { compileRender, freshApp } from "./support.ts";
 import { signal } from "../src/reactivity.ts";
-import { createApp, createComponent, type ComponentModule } from "../src/runtime/component.ts";
+import { createApp, type ComponentModule } from "../src/runtime/component.ts";
 
-// ── Multi-root components ─────────────────────────────────────────────────────
-//
-// A component's <template> may now yield N sibling roots — `<div/><div/>` — not
-// just one. app-level multi-root already worked (createApp.mount loops the root
-// list); the gap was CHILD components: createComponent used to throw on >1 root.
-//
-// The model: a component evaluates to a FRAGMENT (Array<SafeElement>). Every site
-// that embeds a `<Child/>` splices that array — an element/slot child appends each
-// root (appendAll), a render root / v-if branch / v-for row spreads them into its
-// returned node list. Two shapes still fail loud: a bare v-if/v-for root (no
-// container to bind here) and a zero-node render (no placeholder to hold position).
 
 function makeModule(template: string, setup: ComponentModule["setup"]): ComponentModule {
   return { setup, render: compileRender(template) as ComponentModule["render"] };
 }
-
-describe("multi-root — codegen string layer", () => {
-  test("a component child of an element splices via appendAll", () => {
-    // The child is a fragment, so the parent appends ALL its roots — appendAll, not
-    // the single-node append used for elements/text.
-    const src = renderSource(`<section><Child></Child></section>`);
-    expect(src).toContain("appendAll(");
-    expect(src).toContain("createComponent(_ctx.Child,");
-  });
-
-  test("a plain element child still uses single-node append", () => {
-    const src = renderSource(`<section><span>x</span></section>`);
-    expect(src).toContain("append(");
-    expect(src).not.toContain("appendAll(");
-  });
-
-  test("a component at the render root is spread into the roots array", () => {
-    // `return [...n0]` — the fragment flattens into render's own root list so the
-    // mount site sees each sibling node, exactly like the app root loop expects.
-    const src = renderSource(`<Child />`);
-    expect(src).toMatch(/return \[\s*\.\.\.n\d+\s*\]/);
-  });
-
-  test("a component root inside a v-for row is spread into the row's nodes", () => {
-    const src = renderSource(`<ul><Row v-for="r in rows" :key="r.id" /></ul>`);
-    // The row factory returns the fragment spread, not a bare node.
-    expect(src).toMatch(/return \[\.\.\.n\d+\]/);
-  });
-
-  test("a component root inside a v-if branch is spread into the branch's nodes", () => {
-    const src = renderSource(`<div><Child v-if="ok" /></div>`);
-    expect(src).toMatch(/return \[\.\.\.n\d+\]/);
-  });
-});
 
 describe("multi-root — DOM end-to-end", () => {
   test("a multi-root child renders all its roots under the parent element", () => {
@@ -59,8 +14,7 @@ describe("multi-root — DOM end-to-end", () => {
     const Parent = makeModule(`<section><Child></Child></section>`, () => ({ Child }));
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     expect(app.querySelector("section .a")).toBeTruthy();
     expect(app.querySelector("section .b")).toBeTruthy();
@@ -73,8 +27,7 @@ describe("multi-root — DOM end-to-end", () => {
     const App = makeModule(`<Child />`, () => ({ Child }));
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(App).mount(container, gui);
+    const dispose = createApp(App).mount(gui);
 
     expect(app.querySelectorAll("p")).toHaveLength(2);
     expect(app.querySelector(".x")).toBeTruthy();
@@ -90,8 +43,7 @@ describe("multi-root — DOM end-to-end", () => {
     );
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     const spans = Array.from(app.querySelectorAll("span")).map((s) => s.textContent);
     expect(spans).toEqual(["B", "M", "N", "A"]);
@@ -108,8 +60,7 @@ describe("multi-root — DOM end-to-end", () => {
     const Parent = makeModule(`<section><Child></Child></section>`, () => ({ Child }));
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     expect(app.querySelector(".a")?.textContent).toBe("a0");
     expect(app.querySelector(".b")?.textContent).toBe("b0");
@@ -129,8 +80,7 @@ describe("multi-root — DOM end-to-end", () => {
     );
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     // 2 rows × 2 roots each = 4 cells.
     expect(app.querySelectorAll("td")).toHaveLength(4);
@@ -151,8 +101,7 @@ describe("multi-root — DOM end-to-end", () => {
     );
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     expect(app.querySelectorAll("i")).toHaveLength(2);
     show.value = false;
@@ -168,8 +117,7 @@ describe("multi-root — DOM end-to-end", () => {
     const Parent = makeModule(`<div><Mid></Mid></div>`, () => ({ Mid }));
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     // Mid = 2 × Leaf, each Leaf = 2 roots → 4 <b> under the div.
     expect(app.querySelectorAll("div > b")).toHaveLength(4);
@@ -183,8 +131,7 @@ describe("multi-root — DOM end-to-end", () => {
     const Parent = makeModule(`<section><Child></Child></section>`, () => ({ Child }));
 
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    const dispose = createApp(Parent).mount(container, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     expect(app.querySelector("section .solo")?.textContent).toBe("only");
     expect(app.querySelectorAll("section > div")).toHaveLength(1);
@@ -192,24 +139,15 @@ describe("multi-root — DOM end-to-end", () => {
   });
 });
 
-describe("multi-root — fail loud", () => {
-  test("a child that renders zero roots throws", () => {
-    // A component with no nodes has nothing to hold its position. createComponent
-    // is called directly with a render that yields an empty array.
-    const Empty: ComponentModule = { setup: () => ({}), render: () => [] };
-    expect(() =>
-      createComponent(Empty as ComponentModule, {}, freshApp().gui),
-    ).toThrow(/at least one root node/);
-  });
-
-  test("a child whose only root is a bare v-if is still rejected", () => {
-    // A root-level v-if yields a rootIf MARKER, not a real node — createComponent
-    // has no container to bind it, so it fails loud even now that N roots are ok.
-    const Child = makeModule(`<b v-if="ok">x</b>`, () => ({ ok: signal(true) }));
-    const Parent = makeModule(`<div><Child></Child></div>`, () => ({ Child }));
-
-    const { gui } = freshApp();
-    const container = gui.getElement("app")!;
-    expect(() => createApp(Parent).mount(container, gui)).toThrow(/bare v-if\/v-for/);
-  });
+test("empty and conditional child roots mount directly between siblings", () => {
+  const ok = signal(false);
+  const Child = makeModule("<b v-if='ok'>x</b>", () => ({ok}));
+  const Empty = makeModule("", () => ({}));
+  const Parent = makeModule("<span>A</span><Empty/><Child/><span>B</span>", () => ({Child, Empty}));
+  const { gui, app } = freshApp();
+  const dispose = createApp(Parent).mount(gui);
+  expect(app.textContent).toBe("AB");
+  ok.value = true;
+  expect(app.textContent).toBe("AxB");
+  dispose();
 });

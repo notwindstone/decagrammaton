@@ -43,32 +43,31 @@ describe("attribute codegen (slice 5)", () => {
 
   test("a dynamic :attr wraps the setter in a renderEffect with a prefixed expr", () => {
     const src = renderSource(`<div :title="ttl">hi</div>`);
-    expect(src).toContain(`renderEffect(() => n0.setTitle(_ctx.ttl))`);
+    expect(src).toContain(`renderEffect(() => { n0.setTitle(attributeString((_ctx.ttl))); })`);
   });
 
   test("a dynamic :class normalizes the binding (Vue object/array/string syntax)", () => {
     const src = renderSource(`<div :class="cls">hi</div>`);
-    expect(src).toContain(`renderEffect(() => n0.setClass(normalizeClass(_ctx.cls)))`);
+    expect(src).toContain(`renderEffect(() => n0.setClass(normalizeClass((_ctx.cls))))`);
   });
 
   test("a static class + dynamic :class merge, static base first", () => {
     const src = renderSource(`<div class="btn" :class="{ active: on }">hi</div>`);
     expect(src).toContain(
-      `renderEffect(() => n0.setClass(normalizeClass(["btn", { active: _ctx.on }])))`,
+      `renderEffect(() => n0.setClass(normalizeClass(["btn", ({ active: _ctx.on })])))`,
     );
   });
 
   test("data-/aria- use the two-arg setter, key first, author casing preserved", () => {
     expect(renderSource(`<div data-id="5">x</div>`)).toContain(`n0.setData("id", "5")`);
     expect(renderSource(`<div :aria-label="lbl">x</div>`)).toContain(
-      `renderEffect(() => n0.setAria("label", _ctx.lbl))`,
+      `renderEffect(() => { n0.setAria("label", attributeString((_ctx.lbl))); })`,
     );
   });
 
-  test("a valueless boolean attr emits the string \"true\", not \"\"", () => {
-    // ark boolean setters guard on `if (value)`, so "" (falsy) would no-op.
+  test("a valueless boolean attr emits true", () => {
     const src = renderSource(`<input readonly />`);
-    expect(src).toContain(`n0.setReadonly("true")`);
+    expect(src).toContain(`n0.setReadonly(true)`);
   });
 
   test("an explicit empty class=\"\" keeps its own empty string", () => {
@@ -103,21 +102,21 @@ describe("tag creators — named methods, never createElement (slice 5 tables)",
 });
 
 describe("structural directive codegen shape (slices 3, 4, 6)", () => {
-  test("a root-level v-if emits a rootIf marker with lazy condition + factory", () => {
+  test("a root-level v-if mounts a conditional fragment with lazy condition + factory", () => {
     const src = renderSource(`<p v-if="a">A</p><p v-else>B</p>`);
-    expect(src).toContain("rootIf(");
-    expect(src).toContain(`condition: () => _ctx.a`); // lazy getter, tracked in effect
+    expect(src).toContain("createIf(");
+    expect(src).toContain(`condition: () => (_ctx.a)`); // lazy getter, tracked in effect
     expect(src).toContain(`condition: null`);         // v-else
-    expect(src).toContain(`factory: () =>`);          // lazy branch builder
+    expect(src).toContain(`factory: (parent, before) =>`);          // lazy branch builder
   });
 
-  test("a root-level v-for emits a rootFor marker with source/aliases/key config", () => {
+  test("a root-level v-for mounts a list fragment with source/aliases/key config", () => {
     const src = renderSource(`<ul><li v-for="(x, i) in xs" :key="x.id">{{ x }}</li></ul>`);
     expect(src).toContain("createFor(");
-    expect(src).toContain(`source: () => _ctx.xs`);
-    expect(src).toContain(`aliases: { value: "x", key: "i", index: null }`);
+    expect(src).toContain(`source: () => (_ctx.xs)`);
+    expect(src).toContain(`aliases: { value: "x", key: "i" }`);
     // :key params are row locals — seeded, so they stay BARE (not _ctx.x.id).
-    expect(src).toContain(`key: (x, i) => x.id`);
+    expect(src).toContain(`key: (x, i) => (x.id)`);
   });
 
   test("an unkeyed v-for emits key: null", () => {
@@ -129,7 +128,7 @@ describe("structural directive codegen shape (slices 3, 4, 6)", () => {
     expect(src).toContain(`createComponent(_ctx.Child,`);
     // static + dynamic props both emitted as getters — dynamic tracks the signal.
     expect(src).toContain(`"name": () => "w"`);
-    expect(src).toContain(`"count": () => _ctx.c`);
+    expect(src).toContain(`"count": () => (_ctx.c)`);
   });
 
   test("kebab-case prop names camelise to match the child's camelCase binding", () => {
@@ -137,7 +136,7 @@ describe("structural directive codegen shape (slices 3, 4, 6)", () => {
     // the emitted prop KEY must be camelised or the lookup misses -> undefined.
     const src = renderSource(`<Child attribute-name="w" :other-prop="c" />`);
     expect(src).toContain(`"attributeName": () => "w"`);
-    expect(src).toContain(`"otherProp": () => _ctx.c`);
+    expect(src).toContain(`"otherProp": () => (_ctx.c)`);
     // dashless names are left exactly as-is.
     expect(renderSource(`<Child count="1" />`)).toContain(`"count": () => "1"`);
   });

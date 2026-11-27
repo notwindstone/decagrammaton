@@ -10,7 +10,7 @@ import { renderSource, compileSFC, mountTemplate } from "./support.ts";
 describe("<style> — string layer (codegen)", () => {
   test("a style block emits mountStyle(gui, css) before any node", () => {
     const src = renderSource(`<p>hi</p>`, ["p{color:red}"]);
-    expect(src).toContain(`mountStyle(gui, "p{color:red}");`);
+    expect(src).toContain(`mountStyle(gui, "p{color:red}", render_styles[0]);`);
     // It precedes the first node creation in the body.
     const styleAt = src.indexOf("mountStyle(gui,");
     const nodeAt = src.indexOf("const n0");
@@ -25,8 +25,8 @@ describe("<style> — string layer (codegen)", () => {
 
   test("multiple blocks emit one line each, in order", () => {
     const src = renderSource(`<p>hi</p>`, ["a{}", "b{}"]);
-    const first = src.indexOf(`mountStyle(gui, "a{}");`);
-    const second = src.indexOf(`mountStyle(gui, "b{}");`);
+    const first = src.indexOf(`mountStyle(gui, "a{}", render_styles[0]);`);
+    const second = src.indexOf(`mountStyle(gui, "b{}", render_styles[1]);`);
     expect(first).toBeGreaterThanOrEqual(0);
     expect(second).toBeGreaterThan(first);
   });
@@ -35,7 +35,7 @@ describe("<style> — string layer (codegen)", () => {
     const css = `a::before{content:"x"}\np{color:blue}`;
     const src = renderSource(`<p>hi</p>`, [css]);
     // The emitted literal round-trips back to the exact CSS via JSON.parse.
-    const match = src.match(/mountStyle\(gui, (".*?")\);/s);
+    const match = src.match(/mountStyle\(gui, (".*?"), render_styles/s);
     expect(match).not.toBeNull();
     expect(JSON.parse(match![1])).toBe(css);
   });
@@ -49,7 +49,7 @@ describe("<style> — compile() layer (full SFC)", () => {
     expect(mod).toContain("mountStyle");
     // Imported from the runtime and called in the body.
     expect(mod).toContain(`from "decagrammaton/runtime"`);
-    expect(mod).toContain(`mountStyle(gui, "p{color:red}");`);
+    expect(mod).toContain(`mountStyle(gui, "p{color:red}", render_styles[0]);`);
   });
 
   test("no <style> -> no mountStyle in the emitted module", () => {
@@ -57,13 +57,11 @@ describe("<style> — compile() layer (full SFC)", () => {
     expect(mod).not.toContain("mountStyle(gui,");
   });
 
-  test("whitespace-heavy CSS is minified before it reaches mountStyle", () => {
+  test("whitespace-heavy CSS is preserved before it reaches mountStyle", () => {
     const mod = compileSFC(
       `<template><p>hi</p></template>\n<style>\n  .foo,\n  .bar {\n    color: red;\n  }\n</style>`,
     );
-    // The author's newlines/indentation are collapsed; the compact form ships.
-    expect(mod).toContain(`mountStyle(gui, ".foo,.bar{color: red;}");`);
-    expect(mod).not.toContain("\\n  .foo");
+    expect(mod).toContain(JSON.stringify("\n  .foo,\n  .bar {\n    color: red;\n  }\n"));
   });
 });
 

@@ -1,101 +1,129 @@
-// Build-time lookup tables: the surviving "good parts" of the old runtime
-// render.ts, kept as DATA (per the rewrite plan). Codegen resolves each tag /
-// event against these at build time. A tag or event with no entry has no Ark
-// method — codegen throws, which is exactly the whitelist-by-construction
-// security property.
-//
-// Source of truth for the method names is ark-of-atrahasis' surface.
+import {
+  FACTORY_TAGS,
+  FORMATTING_TAGS,
+  LIST_TYPES,
+  PUBLIC_EVENT_CATALOG,
+  isAttrKeySafe,
+  isInputTypeAllowed,
+  isButtonTypeAllowed,
+  isValidMimeType,
+} from "ark-of-atrahasis/validators";
+import { DecaCompileError } from "./errors.ts";
 
-// Tags created by a dedicated `gui.create*()` method.
-export const TAG_CREATORS: Record<string, string> = {
-  div: "createDiv", span: "createSpan", section: "createSection",
-  article: "createArticle", nav: "createNav", header: "createHeader",
-  footer: "createFooter", main: "createMain", aside: "createAside",
-  figure: "createFigure", figcaption: "createFigcaption",
-  p: "createText", blockquote: "createBlockquote", pre: "createPre",
-  li: "createListItem", dt: "createTerm", dd: "createDescription",
-  table: "createTable", thead: "createThead", tbody: "createTbody",
-  tfoot: "createTfoot", tr: "createTr", th: "createTh", td: "createTd",
-  caption: "createCaption", colgroup: "createColgroup", col: "createCol",
-  button: "createButton", input: "createInput", select: "createSelect",
-  option: "createOption", optgroup: "createOptgroup",
-  textarea: "createTextarea", label: "createLabel",
-  fieldset: "createFieldset", legend: "createLegend",
-  img: "createImage", video: "createVideo", audio: "createAudio",
-  source: "createSource", track: "createTrack", picture: "createPicture",
-  canvas: "createCanvas",
-  a: "createAnchor", details: "createDetails", summary: "createSummary",
-  dialog: "createDialog", hr: "createHr", br: "createBr", wbr: "createWbr",
-  progress: "createProgress", meter: "createMeter",
-  output: "createOutput", time: "createTime", data: "createData",
-  ruby: "createRuby", rt: "createRt", rp: "createRp",
-};
+const creators = new Map<string, string>(
+  Object.entries(FACTORY_TAGS).map(([method, tag]) => [tag, method + "()"]),
+);
+for (const tag of FORMATTING_TAGS) creators.set(tag, `createFormatting("${tag}")`);
+const lists = { ordered: "ol", unordered: "ul", description: "dl" };
+for (const type of LIST_TYPES) creators.set(lists[type], `createList("${type}")`);
+for (let i = 1; i <= 6; i++) creators.set("h" + i, `createHeading(${i})`);
+export { creators };
+export const events = new Set<string>(Object.values(PUBLIC_EVENT_CATALOG).map((event) => event.type));
+export const voidTags = new Set("input img br hr wbr col source track".split(" "));
 
-// Inline formatting tags created via `gui.createFormatting(tag)`.
-export const FORMATTING_TAGS = new Set<string>([
-  "strong", "em", "small", "b", "i", "u",
-  "code", "kbd", "samp", "var",
-  "sub", "sup", "mark", "abbr", "cite",
-]);
+type Kind = "string" | "boolean" | "integer" | "number";
+interface Setter {
+  method: string;
+  kind: Kind;
+  key?: string;
+  min?: number;
+  max?: number;
+}
+const setters = new Map<string, Setter>();
+function register(tags: string, names: string, kind: Kind = "string", min?: number, max?: number) {
+  for (const tag of tags.split(" "))
+    for (const name of names.split(" ")) {
+      setters.set(tag + "." + name.toLowerCase(), {
+        kind,
+        method: "set" + name[0].toUpperCase() + name.slice(1),
+        min,
+        max,
+      });
+    }
+}
+register("*", "id title role lang dir");
+register("*", "hidden spellcheck", "boolean");
+register("*", "tabIndex", "integer", -2147483648, 2147483647);
+register("input textarea select", "autocomplete");
+register("input textarea select option button output", "value");
+register("input textarea select button output", "name");
+register("input textarea", "placeholder");
+register("input textarea", "minLength maxLength", "integer", 0, 2147483647);
+register("input textarea", "readonly", "boolean");
+register("input textarea select", "required", "boolean");
+register("input select", "multiple", "boolean");
+register("input textarea select option optgroup button fieldset", "disabled", "boolean");
+register("input", "min max step pattern inputMode enterKeyHint");
+register("input", "checked autofocus", "boolean");
+register("input button source", "type");
+register("textarea", "rows cols", "integer", 1, 2147483647);
+register("textarea", "wrap");
+register("option", "selected", "boolean");
+register("option optgroup track", "label");
+register("label output", "for");
+register("a", "href");
+register("img video audio source track", "src");
+register("img", "loading alt");
+register("img video canvas", "width height", "integer", 0, 2147483647);
+register("audio video", "controls autoplay loop muted", "boolean");
+register("video", "poster");
+register("track", "kind srclang");
+register("track", "default", "boolean");
+register("td th", "colspan", "integer", 1, 1000);
+register("td th", "rowspan", "integer", 0, 65534);
+register("td th", "headers");
+register("th", "scope");
+register("dialog details", "open", "boolean");
+register("meter progress", "max value", "number");
+register("meter", "low high optimum min", "number");
 
-// HTML/template attribute name -> Ark element setter method (slice 5).
-//
-// FLAT table, no per-tag validation (architect decision A): the key is the attr
-// name and the value is the ark setter, resolved WITHOUT checking whether that
-// setter is valid on the specific tag. `:href` on a <div> emits `div.setHref(…)`
-// and is allowed to fail/no-op at runtime — ark's own types are the backstop.
-// An attr with NO entry here has no whitelisted setter and codegen THROWS: that
-// build-time throw IS the whitelist (there is no generic setAttribute).
-//
-// Keys are LOWERCASE. baseParse preserves the author's attr-name casing (probe-
-// confirmed: `:maxLength` arrives as "maxLength", `TabIndex` as "TabIndex"), so
-// codegen lowercases once before lookup — HTML attributes are case-insensitive,
-// lowercase is their canonical form. Setter names are ark's camelCase.
-//
-// `data-*` / `aria-*` are NOT in this table: they use the two-arg
-// `setData(key, value)` / `setAria(key, value)` and are special-cased by prefix
-// in codegen. Every setter below is one-arg.
-export const ATTR_SETTERS: Record<string, string> = {
-  // Common — on SafeElement, valid on every element. `style` is NOT here: it is
-  // not a one-arg setter (elements have no cssText sink; `setCSS` belongs to a
-  // <style> element). codegen special-cases `style`/`:style` to the setStyle
-  // runtime helper, which writes element.style's per-property allowlist proxy.
-  class: "setClass", id: "setId", title: "setTitle", role: "setRole",
-  tabindex: "setTabIndex", hidden: "setHidden", lang: "setLang", dir: "setDir",
-  spellcheck: "setSpellcheck",
-
-  // Per-element (flat-merged; where an attr name recurs across elements it maps
-  // to the same setter, so there is no conflict — one entry each).
-  // input:
-  type: "setType", value: "setValue", placeholder: "setPlaceholder",
-  disabled: "setDisabled", readonly: "setReadonly", required: "setRequired",
-  checked: "setChecked", min: "setMin", max: "setMax", step: "setStep",
-  minlength: "setMinLength", maxlength: "setMaxLength", pattern: "setPattern",
-  autocomplete: "setAutocomplete", autofocus: "setAutofocus", name: "setName",
-  inputmode: "setInputMode", enterkeyhint: "setEnterKeyHint",
-  // textarea adds:
-  rows: "setRows", cols: "setCols", wrap: "setWrap",
-  // select / option:
-  multiple: "setMultiple", selected: "setSelected", label: "setLabel",
-  // label:
-  for: "setFor",
-  // img:
-  src: "setSrc", alt: "setAlt", width: "setWidth", height: "setHeight",
-  loading: "setLoading",
-  // anchor:
-  href: "setHref",
-  // video / audio:
-  controls: "setControls", autoplay: "setAutoplay", loop: "setLoop",
-  muted: "setMuted", poster: "setPoster",
-  // table-cell:
-  colspan: "setColspan", rowspan: "setRowspan", scope: "setScope",
-  headers: "setHeaders",
-  // details / dialog:
-  open: "setOpen",
-};
-
-// EVENT_METHODS moved to ../runtime/event-methods.ts — it is the runtime's own
-// event allowlist (re-checked by `on()` at runtime), so it lives with the
-// runtime to keep the shipped runtime bundle from depending on compiler code.
-// Codegen imports it from there for its build-time pre-check.
-export { EVENT_METHODS } from "../runtime/event-methods.ts";
+export function setter(tag: string, attr: string): Setter {
+  const name = attr.toLowerCase();
+  if (/^(aria|data)-/.test(name) && attr === name && isAttrKeySafe(name.slice(5))) {
+    return {
+      method: name.startsWith("aria-") ? "setAria" : "setData",
+      kind: "string",
+      key: name.slice(5),
+    };
+  }
+  const entry = setters.get(tag + "." + name) ?? setters.get("*." + name);
+  if (!entry) throw new DecaCompileError(`Unknown attribute "${attr}" on <${tag}>.`);
+  return entry;
+}
+export function literal(tag: string, name: string, entry: Setter, raw: string | null) {
+  const value = raw ?? "";
+  function invalid(): never {
+    throw new DecaCompileError(`Invalid ${name} on <${tag}>: ${JSON.stringify(raw)}`);
+  }
+  if (entry.kind === "boolean") {
+    if (name === "autofocus") invalid();
+    if (name === "spellcheck") {
+      if (!["", "true", "false"].includes(value.toLowerCase())) invalid();
+      return value.toLowerCase() !== "false";
+    }
+    return true;
+  }
+  if (entry.kind !== "string") {
+    const numeric =
+      entry.kind === "integer" ? /^[+-]?\d+$/ : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+    if (!numeric.test(value.trim())) invalid();
+    const n = Number(value);
+    if (
+      !Number.isFinite(n) ||
+      (entry.kind === "integer" && (!Number.isInteger(n) || n < entry.min! || n > entry.max!))
+    )
+      invalid();
+    return n;
+  }
+  if (name === "autocomplete" && value !== "off") invalid();
+  if (name === "type") {
+    if (tag === "source") {
+      if (!isValidMimeType(value)) invalid();
+    } else {
+      const type = value.toLowerCase();
+      if (!(tag === "input" ? isInputTypeAllowed(type) : isButtonTypeAllowed(type))) invalid();
+      return type;
+    }
+  }
+  return value;
+}

@@ -33,8 +33,8 @@
       "import": "./dist/compiler/script.js"
     },
     "./compiler": {
-      "types": "./dist/compiler/compiler.d.ts",
-      "import": "./dist/compiler/compiler.js"
+      "types": "./dist/compiler/compile.d.ts",
+      "import": "./dist/compiler/compile.js"
     }
   },
   "files": [
@@ -47,11 +47,13 @@
     "test": "bun test",
     "docs:dev": "cd docs && bun run dev",
     "docs:build": "cd docs && bun run build",
-    "docs:preview": "cd docs && bun run preview"
+    "docs:preview": "cd docs && bun run preview",
+    "test:consumer": "bun scripts/test-consumer.ts"
   },
   "peerDependencies": {
     "vite": ">=5",
-    "vue": "^3.5"
+    "vue": "^3.5",
+    "ark-of-atrahasis": ">=0.4.0"
   },
   "peerDependenciesMeta": {
     "vite": {
@@ -62,7 +64,7 @@
     "@happy-dom/global-registrator": "^20.10.6",
     "@types/bun": "^1.3.14",
     "@types/node": "^26.1.0",
-    "ark-of-atrahasis": "^0.3.1",
+    "ark-of-atrahasis": "link:../ark-of-atrahasis",
     "happy-dom": "^20.10.6",
     "vite": "^8.1.1",
     "vue": "^3.5.39"
@@ -74,7 +76,7 @@
     "@vue/shared": "^3.5.39",
     "acorn": "^8.17.0",
     "acorn-walk": "^8.3.5",
-    "css-simple-minifier": "^2.0.1",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "@vue/compiler-dom": "^3.5.39"
   }
 }

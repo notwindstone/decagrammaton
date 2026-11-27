@@ -17,12 +17,12 @@ describe("inline style — string layer (codegen)", () => {
 
   test("dynamic :style wraps setStyle in a renderEffect, prefixed against _ctx", () => {
     const src = renderSource(`<div :style="{ color: c }">x</div>`);
-    expect(src).toContain(`renderEffect(() => setStyle(n0, { color: _ctx.c }));`);
+    expect(src).toContain(`renderEffect(() => setStyle(n0, ({ color: _ctx.c })));`);
   });
 
   test("dynamic :style with a bound identifier prefixes it", () => {
     const src = renderSource(`<div :style="styles">x</div>`);
-    expect(src).toContain(`renderEffect(() => setStyle(n0, _ctx.styles));`);
+    expect(src).toContain(`renderEffect(() => setStyle(n0, (_ctx.styles)));`);
   });
 });
 

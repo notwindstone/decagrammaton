@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { signal, createScope, runWithScope } from "../src/reactivity.ts";
-import { createProps, createContext, renderEffect } from "../src/runtime/helpers.ts";
+import { createProps, createContext, renderEffect } from "../src/runtime/index.ts";
 
 // ── Slice 6: props ───────────────────────────────────────────────────────────
 //

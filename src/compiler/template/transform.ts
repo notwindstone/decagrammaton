@@ -1,3 +1,4 @@
+import { creators, voidTags } from "../tables.ts";
 import {
   type RootNode,
   type TemplateChildNode,
@@ -10,31 +11,12 @@ import { DecaCompileError } from "../errors.ts";
 import { parseForValueAlias } from "./expression.ts";
 import type { IRNode, IRElement, IRIf, IRFor, IRComponent, IRSlot, IRModel } from "./ir.ts";
 
-// baseParse pre-parses a v-for's `LHS in/of RHS` into `forParseResult` (probe-
-// confirmed): `source`/`value`/`key`/`index` arrive as expression nodes, so we
-// never hand-split the alias string. `value` (the item alias) is always present
-// on a well-formed v-for; `key`/`index` are absent unless the template writes
-// `(item, i, idx)`.
 interface ForParseResultLike {
   source: SimpleExpressionNode;
   value?: SimpleExpressionNode;
   key?: SimpleExpressionNode;
   index?: SimpleExpressionNode;
 }
-
-// Walk the @vue/compiler-core AST into our explicit-tree IR.
-//
-// Slice 2 handles exactly what the counter needs:
-//   - element nodes with `@event` (v-on) directives
-//   - static text
-//   - {{ interpolation }}
-// Slice 3 adds v-if / v-else-if / v-else. baseParse does NOT pre-group these
-// (verified by probe): it emits the three `<p>`s as separate sibling ELEMENT
-// nodes each carrying an `if` / `else-if` / `else` DirectiveNode. So the
-// grouping is ours — transformChildren folds a consecutive if/else-if*/else run
-// into one IRIf.
-// Anything else (other directives, components, comments) throws — fail loud
-// rather than silently drop template content.
 
 export function transform(root: RootNode): Array<IRNode> {
   return transformChildren(root.children);
@@ -114,7 +96,7 @@ function collectIfGroup(
     break; // any other node ends the group
   }
 
-  return { node: { kind: "if", branches }, next: i };
+  return { node: { kind: "if", loc: first.loc, branches }, next: i };
 }
 
 // Return the conditional directive on an element, or null. Throws if v-if /
@@ -122,6 +104,10 @@ function collectIfGroup(
 function conditionalDirective(
   node: ElementNode,
 ): { name: "if" | "else-if" | "else"; exp: string | null } | null {
+  if (node.props.some(p => p.type === NodeTypes.DIRECTIVE && p.name === "for") &&
+      node.props.some(p => p.type === NodeTypes.DIRECTIVE && ["if", "else-if", "else"].includes(p.name))) {
+    throw new DecaCompileError(`v-if and v-for on the same <${node.tag}> are not supported.`);
+  }
   for (const prop of node.props) {
     if (prop.type !== NodeTypes.DIRECTIVE) continue;
     const dir = prop as DirectiveNode;
@@ -164,13 +150,6 @@ function forDirective(node: ElementNode): ForParseResultLike | null {
 // Vue gives v-if higher priority so it cannot see the loop variable — always a
 // footgun. Fail loud; nest instead.
 function transformFor(node: ElementNode, parsed: ForParseResultLike): IRFor {
-  if (conditionalDirective(node)) {
-    throw new DecaCompileError(
-      `v-if and v-for on the same <${node.tag}> is not supported — ` +
-        `wrap the v-for element in a v-if parent (or vice versa) instead.`,
-    );
-  }
-
   const value = parsed.value?.content;
   if (!value) {
     throw new DecaCompileError(
@@ -179,7 +158,7 @@ function transformFor(node: ElementNode, parsed: ForParseResultLike): IRFor {
   }
 
   return {
-    kind: "for",
+    kind: "for", loc: node.loc,
     source: parsed.source.content,
     valueBinding: parseForValueAlias(value),
     valueAlias: value,
@@ -219,12 +198,12 @@ function transformChild(node: TemplateChildNode): IRNode | null {
     case NodeTypes.TEXT: {
       // Collapse pure-whitespace text between elements away; keep real text.
       if (node.content.trim() === "") return null;
-      return { kind: "text", value: node.content };
+      return { kind: "text", loc: node.loc, value: node.content };
     }
 
     case NodeTypes.INTERPOLATION: {
       const exp = node.content as SimpleExpressionNode;
-      return { kind: "interpolation", expression: exp.content };
+      return { kind: "interpolation", loc: node.loc, expression: exp.content };
     }
 
     case NodeTypes.COMMENT:
@@ -232,7 +211,7 @@ function transformChild(node: TemplateChildNode): IRNode | null {
 
     default:
       throw new DecaCompileError(
-        `Unsupported template node type (${node.type}) in this slice.`,
+        `Unsupported template node type (${node.type}).`,
       );
   }
 }
@@ -242,7 +221,15 @@ function transformElement(node: ElementNode): IRElement | IRComponent | IRSlot {
   // build-time ark creator — a component is a compiled safe module, not a leaf.
   // Routing here (the single ElementNode handler) means components compose
   // everywhere an element does: as a child, a v-if branch root, or a v-for row.
-  if (node.tagType === 1) {
+  const dirs = node.props.filter(p => p.type === NodeTypes.DIRECTIVE);
+  for (const dir of dirs) {
+    const allowed = dir.name === "on" ? ["prevent", "stop"] : dir.name === "model" ? ["lazy", "trim", "number"] : [];
+    for (const mod of dir.modifiers) if (!allowed.includes(mod.content)) {
+      throw new DecaCompileError(`Unsupported modifier .${mod.content} on v-${dir.name} at ${mod.loc.start.line}:${mod.loc.start.column}.`);
+    }
+  }
+  if (voidTags.has(node.tag) && node.children.length) throw new DecaCompileError(`Void element <${node.tag}> cannot have children.`);
+  if (node.tagType === 1 && !creators.has(node.tag)) {
     return transformComponent(node);
   }
   // A `<slot>` outlet (tagType 2) inside this component's own template. Only the
@@ -251,9 +238,9 @@ function transformElement(node: ElementNode): IRElement | IRComponent | IRSlot {
   if (node.tagType === 2) {
     return transformSlot(node);
   }
-  if (node.tagType !== 0) {
+  if (node.tagType !== 0 && !creators.has(node.tag)) {
     throw new DecaCompileError(
-      `Unsupported element "${node.tag}" (<template> is not supported in this slice).`,
+      `Unsupported element "${node.tag}" (<template> is not supported).`,
     );
   }
 
@@ -321,26 +308,19 @@ function transformElement(node: ElementNode): IRElement | IRComponent | IRSlot {
       }
 
       throw new DecaCompileError(
-        `Unsupported directive "v-${dir.name}" on <${node.tag}> in this slice.`,
+        `Unsupported directive "v-${dir.name}" on <${node.tag}>.`,
       );
     }
 
-    // Static/plain attributes (NodeTypes.ATTRIBUTE): `class="foo"`. Captured as
-    // a non-dynamic attr — codegen emits one setter call with the literal, no
-    // effect wrapper. A valueless attr (`readonly`, `disabled`) has no content
-    // and is a boolean-present; ark's boolean setters guard on `if (value)`, so
-    // it must be truthy — `"true"`, NOT `""` (empty string is falsy and would
-    // silently no-op the attribute). An explicit `class=""` keeps its own empty
-    // string (nullish-coalescing only fires when there is no value at all).
     attrs.push({
       name: prop.name,
-      value: prop.value?.content ?? "true",
+      value: prop.value?.content ?? null,
       dynamic: false,
     });
   }
 
   return {
-    kind: "element",
+    kind: "element", loc: node.loc,
     tag: node.tag,
     events,
     attrs,
@@ -372,7 +352,7 @@ function buildModel(
   if (dir.arg) {
     const arg = dir.arg as SimpleExpressionNode;
     throw new DecaCompileError(
-      `v-model:${arg.content} on <${node.tag}> (named/component models) is not supported in this slice.`,
+      `v-model:${arg.content} on <${node.tag}> (named/component models) is not supported.`,
     );
   }
 
@@ -382,19 +362,8 @@ function buildModel(
   }
 
   // Reject a dynamic `:type` — the kind is a build-time decision.
-  for (const prop of node.props) {
-    if (prop.type === NodeTypes.DIRECTIVE) {
-      const d = prop as DirectiveNode;
-      if (d.name === "bind") {
-        const arg = d.arg as SimpleExpressionNode | undefined;
-        if (arg && arg.isStatic && arg.content.toLowerCase() === "type") {
-          throw new DecaCompileError(
-            `v-model on <${node.tag}> requires a static \`type\` (a dynamic :type has no single lowering).`,
-          );
-        }
-      }
-    }
-  }
+  if (attrs.some((a) => a.dynamic && a.name.toLowerCase() === "type"))
+    throw new DecaCompileError(`v-model on <${node.tag}> requires a static \`type\`.`);
 
   // Modifiers arrive as expression nodes (probe-confirmed), so read `.content`.
   const mods = new Set(
@@ -412,7 +381,7 @@ function buildModel(
     );
   }
 
-  const staticType = attrs.find((a) => a.name.toLowerCase() === "type" && !a.dynamic)?.value;
+  const staticType = attrs.find((a) => a.name.toLowerCase() === "type" && !a.dynamic)?.value?.toLowerCase();
   const hasValueAttr = attrs.some((a) => a.name.toLowerCase() === "value");
   const staticValueAttr = attrs.find((a) => a.name.toLowerCase() === "value" && !a.dynamic)?.value;
 
@@ -427,7 +396,7 @@ function buildModel(
     // is made here at build time from the presence of a static value.
     if (staticValueAttr !== undefined) {
       kind = "checkbox-array";
-      staticValue = staticValueAttr;
+      staticValue = staticValueAttr ?? "";
     } else {
       kind = "checkbox";
     }
@@ -438,7 +407,7 @@ function buildModel(
         `v-model on a radio <${node.tag}> requires a static \`value\` (that is the value it selects).`,
       );
     }
-    staticValue = staticValueAttr;
+    staticValue = staticValueAttr ?? "";
   }
 
   if ((kind === "checkbox" || kind === "checkbox-array" || kind === "radio") && (number || trim)) {
@@ -460,18 +429,6 @@ function buildModel(
   return { kind, expression: exp.content, staticValue, lazy, number, trim };
 }
 
-// Lower a component tag (tagType 1) into an IRComponent. Props are captured the
-// same way element attrs are (static NodeTypes.ATTRIBUTE vs dynamic `:prop`
-// v-bind), but with author casing preserved — component prop names are
-// case-sensitive. Structural directives (v-if/v-else*/v-for and the v-for `:key`)
-// are consumed by the grouping passes and skipped here, exactly as for elements.
-// Component `@events` (defineEmits) are out of this slice — fail loud.
-//
-// A component's own children are its DEFAULT-slot body (`<Child>…</Child>`),
-// transformed with the parent's context and rendered at the child's `<slot>`
-// outlet. Whitespace-only children collapse to an empty list → null (no slot
-// passed). Named slots (`<template #x>` children, or a `v-slot`/`#x` directive on
-// the component) are rejected fail-loud — only the default slot this slice.
 function transformComponent(node: ElementNode): IRComponent {
   const props: IRComponent["props"] = [];
 
@@ -488,14 +445,14 @@ function transformComponent(node: ElementNode): IRComponent {
       // "slot" directive.)
       if (dir.name === "slot") {
         throw new DecaCompileError(
-          `v-slot / #slot on <${node.tag}> (named/scoped slots) is not supported in this slice — ` +
+          `v-slot / #slot on <${node.tag}> (named/scoped slots) is not supported — ` +
             `only the default slot (plain children) is available.`,
         );
       }
 
       if (dir.name === "model") {
         throw new DecaCompileError(
-          `v-model on component <${node.tag}> is not supported in this slice ` +
+          `v-model on component <${node.tag}> is not supported ` +
             `(component models need defineModel/emits).`,
         );
       }
@@ -522,19 +479,15 @@ function transformComponent(node: ElementNode): IRComponent {
       if (dir.name === "on") {
         throw new DecaCompileError(
           `Component events (@${(dir.arg as SimpleExpressionNode | undefined)?.content ?? ""}) ` +
-            `on <${node.tag}> are not in this slice (defineEmits comes later).`,
+            `on <${node.tag}> are not supported (defineEmits comes later).`,
         );
       }
 
       throw new DecaCompileError(
-        `Unsupported directive "v-${dir.name}" on <${node.tag}> in this slice.`,
+        `Unsupported directive "v-${dir.name}" on <${node.tag}>.`,
       );
     }
 
-    // Static prop: `msg="hi"`. A valueless prop (`disabled`) becomes boolean
-    // true — Vue's presence semantics — emitted as the literal string "true"
-    // (codegen JSON-stringifies static values; a real boolean would need a
-    // separate emit path, and props are untyped here, so the string is fine).
     props.push({
       name: prop.name,
       value: prop.value?.content ?? "true",
@@ -548,8 +501,7 @@ function transformComponent(node: ElementNode): IRComponent {
   for (const child of node.children) {
     if (child.type === NodeTypes.ELEMENT && child.tagType === 3) {
       throw new DecaCompileError(
-        `<template> slot bindings inside <${node.tag}> (named/scoped slots) are not supported ` +
-          `in this slice — only the default slot (plain children) is available.`,
+        `<template> slot bindings inside <${node.tag}> (named/scoped slots) are not supported — only the default slot (plain children) is available.`,
       );
     }
   }
@@ -560,7 +512,7 @@ function transformComponent(node: ElementNode): IRComponent {
   const body = transformChildren(node.children);
   const slot = body.length > 0 ? body : null;
 
-  return { kind: "component", tag: node.tag, props, slot };
+  return { kind: "component", loc: node.loc, tag: node.tag, props, slot };
 }
 
 // Lower a `<slot>` outlet (tagType 2) into an IRSlot. Default slot only: a `name`
@@ -575,34 +527,35 @@ function transformSlot(node: ElementNode): IRSlot {
       if (dir.name === "bind") {
         const arg = dir.arg as SimpleExpressionNode | undefined;
         throw new DecaCompileError(
-          `Scoped slot props (:${arg?.content ?? "…"} on <slot>) are not supported in this slice — ` +
+          `Scoped slot props (:${arg?.content ?? "…"} on <slot>) are not supported — ` +
             `only a plain <slot> / <slot></slot> outlet is available.`,
         );
       }
+      if (["if", "else", "else-if", "for"].includes(dir.name)) continue;
       throw new DecaCompileError(
-        `Directive "v-${dir.name}" on <slot> is not supported in this slice.`,
+        `Directive "v-${dir.name}" on <slot> is not supported.`,
       );
     }
     // A static attribute on <slot> — `name="header"` is a named slot; anything
     // else has no meaning on an outlet. Reject either way.
     if (prop.name === "name") {
       throw new DecaCompileError(
-        `Named slots (<slot name="${prop.value?.content ?? ""}">) are not supported in this slice — ` +
+        `Named slots (<slot name="${prop.value?.content ?? ""}">) are not supported — ` +
           `only the default slot is available.`,
       );
     }
     throw new DecaCompileError(
-      `Attribute "${prop.name}" on <slot> is not supported in this slice.`,
+      `Attribute "${prop.name}" on <slot> is not supported.`,
     );
   }
 
-  return { kind: "slot", fallback: transformChildren(node.children) };
+  return { kind: "slot", loc: node.loc, fallback: transformChildren(node.children) };
 }
 
-function transformOn(dir: DirectiveNode, tag: string): { name: string; handler: string } {
+function transformOn(dir: DirectiveNode, tag: string): IRElement["events"][number] {
   const arg = dir.arg as SimpleExpressionNode | undefined;
   if (!arg || !arg.isStatic) {
-    throw new DecaCompileError(`Dynamic event names on <${tag}> are not supported in this slice.`);
+    throw new DecaCompileError(`Dynamic event names on <${tag}> are not supported.`);
   }
 
   const exp = dir.exp as SimpleExpressionNode | undefined;
@@ -610,5 +563,7 @@ function transformOn(dir: DirectiveNode, tag: string): { name: string; handler: 
     throw new DecaCompileError(`Event @${arg.content} on <${tag}> has no handler.`);
   }
 
-  return { name: arg.content, handler: exp.content };
+  const options: Record<string, true> = {};
+  for (const mod of dir.modifiers) options[mod.content === "prevent" ? "preventDefault" : "stopPropagation"] = true;
+  return { name: arg.content, handler: exp.content, options };
 }

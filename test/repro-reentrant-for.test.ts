@@ -1,9 +1,7 @@
+import { createApp } from "../src/runtime/component.ts";
 import { test, expect } from "bun:test";
 import { freshApp, compileRender } from "./support.ts";
-import { signal, computed, createScope, runWithScope } from "../src/reactivity.ts";
-import { createContext } from "../src/runtime/helpers.ts";
-import { createInstance, runWithInstance } from "../src/runtime/instance.ts";
-import type { SafeDocument } from "ark-of-atrahasis";
+import { signal, computed } from "../src/reactivity.ts";
 
 // Regression: the TestParent -> Test crash.
 //
@@ -21,7 +19,6 @@ import type { SafeDocument } from "ark-of-atrahasis";
 
 function mountPair(childTemplate: string) {
   const { gui, app } = freshApp();
-  const container = gui.getElement("app")!;
 
   const childRender = compileRender(childTemplate);
   const data = [
@@ -38,9 +35,7 @@ function mountPair(childTemplate: string) {
       });
       return { filteredData };
     },
-    render(ctx: Record<string, unknown>, g: SafeDocument) {
-      return childRender(ctx, g) as unknown[];
-    },
+    render: childRender,
   };
 
   const query = signal("");
@@ -48,15 +43,8 @@ function mountPair(childTemplate: string) {
     `<div><input v-model="query" /><Child :filterKey="query" /></div>`,
   );
 
-  const scope = createScope();
-  const instance = createInstance(null);
-  runWithScope(scope, () => {
-    runWithInstance(instance, () => {
-      const ctx = createContext({ query, Child: childModule });
-      const nodes = parentRender(ctx, gui) as unknown[];
-      for (const node of nodes) container.appendChild(node as never);
-    });
-  });
+  createApp({ setup: () => ({ query, Child: childModule }), render: parentRender }).mount(gui);
+
 
   const input = app.querySelector("input") as HTMLInputElement;
   // Drive the parent signal DIRECTLY (not via dispatchEvent): happy-dom's

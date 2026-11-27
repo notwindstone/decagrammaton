@@ -1,9 +1,10 @@
-// Public runtime surface, imported by generated render modules and app code as
-// "decagrammaton/runtime".
-export { renderEffect, on, setText, mountStyle, setStyle, normalizeClass, append, appendAll, mountSlot, createContext, createProps, createIf, rootIf, isRootIf, createFor, rootFor, isRootFor, toModelNumber, modelArrayHas, modelArrayToggle } from "./helpers.ts";
-export type { IfBranch, RootIfMarker, ForAliases, ForConfig, RootForMarker, Slots, SlotFn } from "./helpers.ts";
-export { createApp, createComponent } from "./component.ts";
-export type { ComponentModule, AppInstance } from "./component.ts";
-export { provide, inject } from "./instance.ts";
-export type { ComponentInstance } from "./instance.ts";
-export { onMounted, onUnmounted, openMountBatch, flushMountBatch } from "./lifecycle.ts";
+export { group, mountFragment, place, type Block, type Fragment, type Factory, type Node } from "./fragment.ts";
+export * from "./component.ts";
+export { toModelNumber, modelArrayHas, modelArrayToggle, bindSelect, prepareSelect, optionsChanged } from "./model.ts";
+export * from "./dom.ts";
+export * from "./style.ts";
+export * from "./context.ts";
+export * from "./if.ts";
+export * from "./for.ts";
+export { provide, inject, type ComponentInstance } from "./instance.ts";
+export { onMounted, onUnmounted } from "./lifecycle.ts";
