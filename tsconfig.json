@@ -16,12 +16,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "test"],
-  "exclude": ["src/__temporary", "src/__example", "src/main.ts"]
+  "include": ["src", "test", "scripts/test-consumer.ts"]
 }

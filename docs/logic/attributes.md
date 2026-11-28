@@ -48,11 +48,9 @@ Dynamic attribute *names* (`:[attrName]="x"`) are **not** supported — there'd 
 <div :style="{ backgroundColor: 'red', width: `${progress}%` }"></div>
 ```
 
-Each property is applied through Ark's per-property style proxy. A plain `style="..."` string attribute is applied statically.
+Each property is applied through Ark's `SafeStyle` (`set` / `remove`) API. A plain `style="..."` string attribute is applied statically.
 
-::: info
-`:style` does not diff stale keys: if an object binding drops a key entirely between renders, the previously-set property is not explicitly cleared.
-:::
+When a binding drops a property, the runtime removes it or restores the underlying static declaration.
 
 ## Event Handlers `@event="handler"`
 
@@ -65,7 +63,7 @@ Prefix with `@` (shorthand for `v-on:`) to bind an event handler:
 
 A handler may be a **method reference** (`@click="inc"`), a **member reference** (`@click="obj.method"`), an **arrow function** (`@click="() => inc()"`), or an **inline expression** (`@click="count++"`, which the compiler wraps so it runs on each event with `$event` in scope).
 
-The handler receives a `SafeEvent` DTO (not a native `Event`) when running inside a SES compartment. Available events map to whitelisted Ark `on*` methods:
+The handler receives a `SafeEvent` DTO (not a native `Event`) when running inside a SES compartment. The runtime registers handlers through Ark’s `addEventListener`. Use `.prevent` to cancel the default action and `.stop` to stop propagation. The host applies these modifiers before invoking the handler.
 
 | Attribute      | Event       |
 |----------------|-------------|

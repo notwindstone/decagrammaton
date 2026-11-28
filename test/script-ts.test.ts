@@ -7,19 +7,6 @@ import * as runtime from "../src/runtime/index.ts";
 import { createApp } from "../src/runtime/component.ts";
 import { ref } from "../src/reactivity.ts";
 
-// ── TypeScript <script setup lang="ts"> ──────────────────────────────────────
-//
-// The compiler front-end (acorn for template expressions, @babel/parser inside
-// @vue/compiler-sfc's rewriteDefault) is JS-only. A `<script setup lang="ts">`
-// body carrying `interface` / `: T` annotations / `ref<T>()` type args used to
-// crash the build ("Unexpected reserved word 'interface'"). script.ts now
-// transpiles the TS body to plain JS up front, so the whole pipeline sees JS.
-//
-// Two things must hold: types are erased (nothing TS survives into the emitted
-// module) and the module stays wired to decagrammaton — NOT to `vue`. Vue's own
-// TS path rewrites the component to `_defineComponent(...)` and injects
-// `import { defineComponent } from 'vue'`, which is unresolvable in an SES
-// compartment; transpiling first keeps compileScript on its untyped branch.
 
 describe("transpileScript — the raw TS→JS unit", () => {
   test("strips interfaces, type annotations, and generic type args", () => {
@@ -83,7 +70,7 @@ describe("compileSetup — lowering a TS <script setup>", () => {
       "T.vue",
     );
     const { content } = compileSetup(descriptor, "test");
-    expect(content).not.toContain("defineComponent");
+    expect(content).toContain("defineComponent");
     expect(content).not.toContain("from 'vue'");
     expect(content).not.toContain('from "vue"');
   });
@@ -149,27 +136,13 @@ describe("TS SFC — live behavior against real DOM", () => {
 
     // Rewrite the two bare imports to the injected locals, then eval the module
     // body and hand back its default export (the component module).
-    const body = src
-      .replace(/import\s+\{[^}]*\}\s+from\s+"decagrammaton\/runtime";/, "")
-      .replace(/import\s+\{\s*ref\s*\}\s+from\s+"decagrammaton";/, "")
-      .replace(/^export\s+function\s+render/m, "function render")
-      .replace(/export default (\w+);?/, "return $1;");
-
-    const make = new Function(
-      "renderEffect", "on", "setText", "mountStyle", "setStyle", "normalizeClass", "append", "appendAll", "mountSlot",
-      "createIf", "rootIf", "createFor", "rootFor", "createComponent", "toModelNumber", "modelArrayHas", "modelArrayToggle",
-      "ref",
-      body,
-    );
-    const module = make(
-      runtime.renderEffect, runtime.on, runtime.setText, runtime.mountStyle, runtime.setStyle, runtime.normalizeClass, runtime.append, runtime.appendAll, runtime.mountSlot,
-      runtime.createIf, runtime.rootIf, runtime.createFor, runtime.rootFor, runtime.createComponent, runtime.toModelNumber, runtime.modelArrayHas, runtime.modelArrayToggle,
-      ref,
-    );
-
+    const body = src.replace(/import\s+\{([^}]*)\}\s+from\s+["']decagrammaton\/runtime["'];?/g,
+      (_, names) => "const {" + names.replace(/ as /g, ": ") + "} = runtime;")
+      .replace(/import.*from "decagrammaton";/, "")
+      .replace("export function", "function").replace(/export default (\w+);/, "return $1;");
+    const module = new Function("runtime", "ref", body)(runtime, ref);
     const { gui, app } = freshApp();
-    const container = gui.getElement("app")!;
-    createApp(module).mount(container as never, gui);
+    createApp(module).mount(gui);
 
     const button = app.querySelector("button") as HTMLButtonElement;
     expect(button.textContent).toBe("0");

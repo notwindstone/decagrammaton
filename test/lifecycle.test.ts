@@ -25,7 +25,7 @@ describe("onMounted / onUnmounted", () => {
     });
 
     const { gui, app } = freshApp();
-    const dispose = createApp(App).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(App).mount(gui);
 
     expect(calls).toBe(1);
     expect(app.querySelector(".root")).toBeTruthy();
@@ -44,7 +44,7 @@ describe("onMounted / onUnmounted", () => {
     });
 
     const { gui } = freshApp();
-    const dispose = createApp(App).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(App).mount(gui);
 
     expect(foundInDom).toBe(true);
     dispose();
@@ -62,7 +62,7 @@ describe("onMounted / onUnmounted", () => {
     });
 
     const { gui } = freshApp();
-    const dispose = createApp(Parent).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(Parent).mount(gui);
 
     expect(order).toEqual(["child", "parent"]);
     dispose();
@@ -76,7 +76,7 @@ describe("onMounted / onUnmounted", () => {
     });
 
     const { gui } = freshApp();
-    const dispose = createApp(App).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(App).mount(gui);
     expect(unmounted).toBe(0);
     dispose();
     expect(unmounted).toBe(1);
@@ -93,7 +93,7 @@ describe("onMounted / onUnmounted", () => {
     const App = makeModule(`<div><Child v-if="show"></Child></div>`, () => ({ Child, show }));
 
     const { gui, app } = freshApp();
-    const dispose = createApp(App).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(App).mount(gui);
 
     // Not shown initially → no hook, no node.
     expect(order).toEqual([]);
@@ -126,7 +126,7 @@ describe("onMounted / onUnmounted", () => {
     );
 
     const { gui, app } = freshApp();
-    const dispose = createApp(App).mount(gui.getElement("app")!, gui);
+    const dispose = createApp(App).mount(gui);
 
     expect(mounts).toBe(1); // initial row
     items.value = [1, 2];   // reactive add → new row's onMounted fires

@@ -106,15 +106,10 @@ import { createApp } from "decagrammaton";
 import "./style.css";
 import App from "./App.vue";
 
-const { createSafeDocument } = scopedThis;
-// If you want to use Decagrammaton outside the Kaede plugins, remove the line above and uncomment the next one
-// import { createSafeDocument } from "ark-of-atrahasis";
+import { createSafeDocument } from "ark-of-atrahasis";
 
-// 'id' is used in 'document#getElementById'
-const id = "app";
-const gui = createSafeDocument(id);
-const app = createApp(App);
-
-// 'unmount' removes the mounted UI
-const unmount = app.mount(gui.getElement(id)!, gui);
+const gui = createSafeDocument(document.getElementById("app")!, { allowStylesheet: true });
+const unmount = createApp(App).mount(gui);
 ```
+
+Inside a compartment, the host supplies `gui` and the guest calls `createApp(App).mount(gui)`.

@@ -7,7 +7,7 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 ## Templates
 
 - **Single-element roots for `v-if` / `v-for`.** A `v-if` branch or `v-for` row must have exactly one root element/component — no fragments, no bare text, no sibling roots. (A **component template itself** may have multiple sibling roots — `<template><div/><div/></template>` — and so may the app root. Only branch/row bodies are restricted.)
-- **A component must render at least one node.** An empty `<template>` (zero roots) is rejected — there is no placeholder node to hold its position.
+- **Empty component templates are supported.** They mount a fragment with zero nodes.
 - **No `<template>` grouping.** You can't wrap a `v-if`/`v-for` group in a `<template>` tag — use a real element (e.g. `<div>`).
 - **Whitelisted tags only.** Every tag maps to an Ark creator. An unknown tag (e.g. `<marquee>`) has no creator and fails the build.
 - **Whitelisted attributes only.** There is no generic `setAttribute` — each attribute maps to a specific Ark setter. An unmapped attribute fails the build.
@@ -32,9 +32,9 @@ If you know Vue 3, this page is the short list of what's missing or restricted.
 
 ## Styles
 
-- **No `scoped`, no CSS modules, no `lang` preprocessors.** `<style>` is plain global CSS (minified at build).
+- **Inline global CSS.** The compiler passes the contents of `<style>` through to Ark. It rejects `src`, `scoped`, CSS modules, and preprocessor languages.
 
 ## Reactivity gotchas
 
-- **`:style` doesn't diff stale keys** — dropping a key from an object binding between renders doesn't clear the previously-set property.
+- **Reactive inline styles remove stale properties** and restore declarations from the static style.
 - **`<select multiple>` isn't supported** by `v-model` — single-select only.

@@ -1,4 +1,4 @@
-import { parseExpressionAt, type Node as AcornNode, type AnyNode } from "acorn";
+import { tokenizer, parseExpressionAt, type Node as AcornNode, type AnyNode } from "acorn";
 import * as walk from "acorn-walk";
 import { isGloballyAllowed } from "@vue/shared";
 import { DecaCompileError } from "../errors.ts";
@@ -11,7 +11,7 @@ import { DecaCompileError } from "../errors.ts";
 //   - member-property keys (`item.id` -> `_ctx.item.id`, not `_ctx.item._ctx.id`)
 //   - object-literal keys (`{ id: x }` -> `{ id: _ctx.x }`)
 //   - function-local bindings (arrow params: `e => handle(e)` -> `e => _ctx.handle(e)`)
-//   - allowed globals (`Math`, `JSON`, `undefined`, ... via @vue/shared) — these
+//   - unshadowed allowed globals (`Math`, `JSON`, `undefined`, ... via @vue/shared) — these
 //     resolve to the frozen compartment intrinsics, so they stay bare.
 // acorn-walk's base visitors already skip the first two; scope tracking (below)
 // handles the third; `isGloballyAllowed` handles the fourth.
@@ -19,32 +19,31 @@ import { DecaCompileError } from "../errors.ts";
 // The whole expression string must be consumed by a single expression parse —
 // trailing content (`count; evil()`) throws, closing off statement injection.
 
+export interface PropAlias { key: string; fromProps: boolean }
+type Aliases = ReadonlyMap<string, PropAlias>;
+
 interface Reference {
   start: number;
-  name: string;
+  access: string;
+  end: number;
 }
 
 interface PrefixState {
   locals: Set<string>;
+  aliases?: Aliases;
   refs: Array<Reference>;
+  contextNames?: ReadonlySet<string>;
 }
 
 // Parse `source` as a single expression and assert nothing trails it.
 function parseExpression(source: string): AcornNode {
   let node: AcornNode;
   try {
-    node = parseExpressionAt(source, 0, { ecmaVersion: "latest" });
+    node = parseExpressionAt(source, 0, { ecmaVersion: "latest", preserveParens: true });
+    if (tokenizer(source.slice(node.end), { ecmaVersion: "latest" }).getToken().type.label !== "eof") throw new DecaCompileError("Unexpected trailing content.");
   } catch (error) {
     throw new DecaCompileError(
       `Could not parse template expression ${JSON.stringify(source)}: ${(error as Error).message}`,
-    );
-  }
-
-  let end = node.end;
-  while (end < source.length && /\s/.test(source[end]!)) end++;
-  if (end !== source.length) {
-    throw new DecaCompileError(
-      `Unexpected trailing content in template expression ${JSON.stringify(source)}.`,
     );
   }
 
@@ -56,8 +55,15 @@ function parseExpression(source: string): AcornNode {
 function recordIdentifier(node: AcornNode, state: PrefixState): void {
   const name = (node as unknown as { name: string }).name;
   if (state.locals.has(name)) return;
-  if (isGloballyAllowed(name)) return;
-  state.refs.push({ start: node.start, name });
+  if (isGloballyAllowed(name) && !state.aliases?.has(name) && !state.contextNames?.has(name)) return;
+  const alias = state.aliases?.get(name);
+  const key = alias?.key ?? name;
+  const member = key === name || /^[A-Za-z_$][\w$]*$/.test(key) ? "." + key : "[" + JSON.stringify(key) + "]";
+  // Render factories and inline handlers are arrows, so their arguments object
+  // still belongs to render if a template parameter shadows its props parameter.
+  const receiver = alias && (alias.fromProps || state.locals.has("_ctx"))
+    ? (state.locals.has("$props") ? "arguments[5]" : "$props") : "_ctx";
+  state.refs.push({ start: node.start, end: node.end, access: receiver + member });
 }
 
 // A function scope: its params bind new locals that shadow outer identifiers for
@@ -99,7 +105,7 @@ function walkFunction(
     }
   }
 
-  const inner: PrefixState = { locals, refs: state.refs };
+  const inner: PrefixState = { ...state, locals };
   for (const param of fn.params) {
     const p = param as unknown as { type: string; right?: AcornNode };
     if (p.type === "AssignmentPattern") callback(p.right as AnyNode, inner);
@@ -139,11 +145,12 @@ function walkAssignment(
   callback: walk.WalkerCallback<PrefixState>,
 ): void {
   const assign = node as unknown as { left: AcornNode; right: AcornNode };
-  const leftType = (assign.left as { type: string }).type;
+  const left = ungroup(assign.left);
+  const leftType = left.type;
   if (leftType === "Identifier") {
-    recordIdentifier(assign.left, state);
+    recordIdentifier(left, state);
   } else if (leftType === "MemberExpression") {
-    callback(assign.left as AnyNode, state);
+    callback(left as AnyNode, state);
   } else {
     throw new DecaCompileError(
       "Destructuring assignment targets in template expressions are not supported yet.",
@@ -162,16 +169,15 @@ const VISITORS = {
 
 // Prefix free identifiers in `source` with `_ctx.`, treating `initialLocals` as
 // already-bound names (used to seed `$event` for wrapped inline handlers).
-function prefix(source: string, initialLocals: Set<string>): string {
-  const ast = parseExpression(source);
+function prefix(source: string, initialLocals: Set<string>, ast = parseExpression(source), aliases?: Aliases, contextNames?: ReadonlySet<string>): string {
   const refs: Array<Reference> = [];
-  walk.recursive<PrefixState>(ast, { locals: initialLocals, refs }, VISITORS);
+  walk.recursive<PrefixState>(ast, { locals: initialLocals, refs, aliases, contextNames }, VISITORS);
 
   // Splice right-to-left so earlier offsets stay valid.
   refs.sort((a, b) => b.start - a.start);
-  let out = source;
+  let out = source.slice(0, ast.end);
   for (const ref of refs) {
-    out = out.slice(0, ref.start) + "_ctx." + out.slice(ref.start);
+    out = out.slice(0, ref.start) + ref.access + out.slice(ref.end);
   }
   return out;
 }
@@ -185,12 +191,14 @@ function prefix(source: string, initialLocals: Set<string>): string {
 export function rewriteExpression(
   expression: string,
   locals: Set<string> = new Set(),
+  aliases?: Aliases,
+  contextNames?: ReadonlySet<string>,
 ): string {
   const trimmed = expression.trim();
   if (trimmed === "") {
     throw new DecaCompileError("Empty template expression.");
   }
-  return prefix(trimmed, new Set(locals));
+  return prefix(trimmed, new Set(locals), undefined, aliases, contextNames);
 }
 
 // A v-for value alias, parsed from the `LHS` of `LHS in source`. Either a plain
@@ -214,19 +222,15 @@ export function parseForValueAlias(alias: string): ForValueBinding {
 
   let node: AcornNode;
   try {
-    node = parseExpressionAt(`(${trimmed}) => 0`, 0, { ecmaVersion: "latest" });
+    node = parseExpression(`(${trimmed}) => 0`);
   } catch (error) {
     throw new DecaCompileError(
       `Could not parse v-for alias ${JSON.stringify(trimmed)}: ${(error as Error).message}`,
     );
   }
 
-  const param = (node as unknown as { params: Array<AcornNode> }).params[0] as
-    | (AcornNode & { type: string })
-    | undefined;
-  if (!param) {
-    throw new DecaCompileError(`Empty v-for alias ${JSON.stringify(trimmed)}.`);
-  }
+  if (node.type !== "ArrowFunctionExpression" || (node as unknown as { params: unknown[] }).params.length !== 1) throw new DecaCompileError("Expected one v-for alias.");
+  const param = (node as unknown as { params: Array<AcornNode> }).params[0];
 
   if (param.type === "Identifier") {
     return { kind: "identifier", name: (param as unknown as { name: string }).name };
@@ -290,24 +294,28 @@ export function forValueLocals(binding: ForValueBinding): Array<string> {
 //     passed through prefixed — it IS the handler.
 //   - an inline statement (`count++`, `show = !show`, `inc()`) is wrapped into
 //     `$event => (...)` so it runs on every event, with `$event` in scope.
-export function rewriteHandler(expression: string): string {
+function ungroup(node: AcornNode): AcornNode {
+  while (node.type === "ParenthesizedExpression") node = (node as AnyNode & { expression: AcornNode }).expression;
+  return node;
+}
+export function rewriteHandler(expression: string, aliases?: Aliases, contextNames?: ReadonlySet<string>): string {
   const trimmed = expression.trim();
   if (trimmed === "") {
     throw new DecaCompileError("Empty event handler.");
   }
 
   const ast = parseExpression(trimmed);
-  const type = ast.type;
+  const type = ungroup(ast).type;
   if (
     type === "Identifier" ||
     type === "MemberExpression" ||
     type === "ArrowFunctionExpression" ||
     type === "FunctionExpression"
   ) {
-    return prefix(trimmed, new Set());
+    return prefix(trimmed, new Set(), ast, aliases, contextNames);
   }
 
-  const inner = prefix(trimmed, new Set(["$event"]));
+  const inner = prefix(trimmed, new Set(["$event"]), ast, aliases, contextNames);
   return `$event => (${inner})`;
 }
 
@@ -319,20 +327,24 @@ export function rewriteHandler(expression: string): string {
 // statement-body / destructuring rejections elsewhere in this file). The result
 // is prefixed against `_ctx` like any other expression, so `text` becomes
 // `_ctx.text` and routes through createContext's set-trap to the signal.
-export function rewriteModelTarget(expression: string): string {
+export function rewriteModelTarget(expression: string, aliases?: Aliases, contextNames?: ReadonlySet<string>): string {
   const trimmed = expression.trim();
   if (trimmed === "") {
     throw new DecaCompileError("Empty v-model expression.");
   }
 
   const ast = parseExpression(trimmed);
-  const type = ast.type;
-  if (type !== "Identifier" && type !== "MemberExpression") {
+  const type = ungroup(ast).type;
+  let base = ungroup(ast);
+  while (base.type === "MemberExpression") base = ungroup((base as unknown as { object: AcornNode }).object);
+  const name = base.type === "Identifier" ? (base as AnyNode & { name: string }).name : undefined;
+  const global = name && isGloballyAllowed(name) && !contextNames?.has(name) && !aliases?.has(name);
+  if (global || (type !== "Identifier" && type !== "MemberExpression")) {
     throw new DecaCompileError(
       `v-model target ${JSON.stringify(trimmed)} must be an assignable ` +
         `reference (a variable or a member like \`form.name\`), not a ${type}.`,
     );
   }
 
-  return prefix(trimmed, new Set());
+  return prefix(trimmed, new Set(), ast, aliases, contextNames);
 }

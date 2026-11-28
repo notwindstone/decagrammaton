@@ -22,14 +22,14 @@ describe("v-model codegen shape (string layer)", () => {
   test("text input: setValue read-effect + input write-back through the lvalue", () => {
     const src = renderSource(`<input v-model="text" />`);
     expect(src).toContain(`const n0 = gui.createInput();`);
-    expect(src).toContain(`renderEffect(() => n0.setValue(String(_ctx.text ?? "")));`);
+    expect(src).toContain(`renderEffect(() => n0.setValue(attributeString(_ctx.text)));`);
     expect(src).toContain(`on(n0, "input", () => { _ctx.text = n0.getValue(); });`);
   });
 
   test("textarea drives the same setValue/getValue pair on input", () => {
     const src = renderSource(`<textarea v-model="bio"></textarea>`);
     expect(src).toContain(`const n0 = gui.createTextarea();`);
-    expect(src).toContain(`renderEffect(() => n0.setValue(String(_ctx.bio ?? "")));`);
+    expect(src).toContain(`renderEffect(() => n0.setValue(attributeString(_ctx.bio)));`);
     expect(src).toContain(`on(n0, "input", () => { _ctx.bio = n0.getValue(); });`);
   });
 
@@ -62,7 +62,7 @@ describe("v-model codegen shape (string layer)", () => {
 
   test("a member lvalue prefixes correctly on both directions", () => {
     const src = renderSource(`<input v-model="form.name" />`);
-    expect(src).toContain(`renderEffect(() => n0.setValue(String(_ctx.form.name ?? "")));`);
+    expect(src).toContain(`renderEffect(() => n0.setValue(attributeString(_ctx.form.name)));`);
     expect(src).toContain(`on(n0, "input", () => { _ctx.form.name = n0.getValue(); });`);
   });
 });

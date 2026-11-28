@@ -8,7 +8,7 @@ import {
   getCurrentInstance,
   type ComponentInstance,
 } from "../src/runtime/instance.ts";
-import { createIf, createFor } from "../src/runtime/helpers.ts";
+import { createIf, createFor } from "../src/runtime/index.ts";
 
 // Mirror a synchronous mount bracket: create an instance parented to `parent`,
 // run `body` (the setup analog) with it current, restore. Both real mount sites
@@ -101,8 +101,8 @@ describe("provide / inject (slice 6.5)", () => {
 // This is a mechanism-layer test — the real DOM re-mount is browser-verified.
 
 // Minimal fakes: createIf/createFor only call parent.insertBefore(node, anchor)
-// and node.remove(). Nothing here inspects the fakes.
-const fakeNode = () => ({ remove() {} }) as any;
+// and node.dispose(). Nothing here inspects the fakes.
+const fakeNode = () => ({ move() {}, first() { return undefined; } });
 const fakeParent = { insertBefore() {} } as any;
 const fakeAnchor = fakeNode();
 
@@ -126,10 +126,10 @@ describe("directive re-mount instance capture (regression)", () => {
             factory: () => {
               called = true;
               captured = getCurrentInstance();
-              return [fakeNode()];
+              return fakeNode();
             },
           },
-          { condition: null, factory: () => [fakeNode()] }, // v-else
+          { condition: null, factory: () => fakeNode() }, // v-else
         ]);
       });
     });
@@ -158,11 +158,11 @@ describe("directive re-mount instance capture (regression)", () => {
         createFor(fakeParent, fakeAnchor, {
           ctx: {} as any,
           source: () => items.value,
-          aliases: { value: "x", key: null, index: null },
+          aliases: { value: "x", key: null },
           factory: () => {
             called = true;
             captured = getCurrentInstance();
-            return [fakeNode()];
+            return fakeNode();
           },
           key: null,
         });

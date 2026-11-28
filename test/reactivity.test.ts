@@ -2,7 +2,7 @@ import { test, expect, describe } from "bun:test";
 import { mountTemplate } from "./support.ts";
 import * as reactivity from "../src/reactivity.ts";
 import { signal, computed, createScope, runWithScope } from "../src/reactivity.ts";
-import { renderEffect } from "../src/runtime/helpers.ts";
+import { renderEffect } from "../src/runtime/index.ts";
 
 // ── Slice 1: reactivity swap ─────────────────────────────────────────────────
 //
@@ -110,9 +110,9 @@ describe("counter e2e (slice 2)", () => {
   test("disposing the instance scope stops further DOM updates", () => {
     const count = signal(0);
     const { app, scope } = mountTemplate(`<span>{{ count }}</span>`, { count });
-    const span = app.querySelector("span")!;
+    const text = app.querySelector("span")!.firstChild!;
     scope.dispose();
     count.value = 5; // effect is torn down — the node must NOT change
-    expect(span.textContent).toBe("0");
+    expect(text.textContent).toBe("0");
   });
 });
